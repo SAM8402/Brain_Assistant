@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" style="height:100%;">
+<head>
+  <meta charset="UTF-8">
+  <title>Atlas Viewer - Bounding Boxes on Zoomify</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/css/ol.css" type="text/css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    .header {
+      padding-left: 15px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-weight: bold;
+      font-size: 12px;
+      background-color: white;
+      z-index: 100;
+      position: absolute;
+    }
+    .map {
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/build/ol.js"></script>
+</head>
+<body>
+  <div class="header">
+    <p>Atlas Viewer - Bounding Boxes on High-Res Image</p>
+  </div>
+  <div id="map" class="map"></div>
+  <script>
+    const Feature = ol.Feature;
+    const Map = ol.Map;
+    const View = ol.View;
+    const Polygon = ol.geom.Polygon;
+    const Style = ol.style.Style;
+    const Stroke = ol.style.Stroke;
+    const Fill = ol.style.Fill;
+    const VectorLayer = ol.layer.Vector;
+    const VectorSource = ol.source.Vector;
+    const TileLayer = ol.layer.Tile;
+    const Zoomify = ol.source.Zoomify;
+
+    // Bounding boxes: [ [xMin,xMax], [yMin,yMax] ]
+    const bboxes = [
+    [[2704, 4480], [-8552, -10328]],
+    [[2704, 4480], [-10328, -12104]],
+    [[2704, 4480], [-12104, -13880]],
+    [[9808, 11584], [-12104, -13880]],
+    [[6256, 8032], [-15656, -17432]],
+    [[2704, 4480], [-17432, -19208]],
+    [[9808, 11584], [-17432, -19208]],
+    [[6256, 8032], [-19208, -20984]],
+    [[11584, 13360], [-19208, -20984]],
+    [[8032, 9808], [-20984, -22760]],
+    [[9808, 11584], [-22760, -24536]]
+    ];
+
+    // Convert each bounding box to a polygon feature
+    const features = bboxes.map(([[xMin, xMax], [yMin, yMax]]) => {
+      const coords = [
+        [xMin, yMin],
+        [xMin, yMax],
+        [xMax, yMax],
+        [xMax, yMin],
+        [xMin, yMin]
+      ];
+      return new Feature(new Polygon([coords]));
+    });
+
+    // Style for black rectangle with transparent fill
+    const boxStyle = new Style({
+      stroke: new Stroke({
+        color: 'black',
+        width: 2
+      }),
+      fill: new Fill({
+        color: 'rgba(0, 0, 0, 0)'
+      })
+    });
+
+    const vectorLayer = new VectorLayer({
+      source: new VectorSource({
+        features: features
+      }),
+      style: boxStyle
+    });
+
+    // Zoomify image source
+    const mapurl = 'https://preprod.humanbrain.in//iipsrv/fcgi-bin/iipsrv.fcgi?FIF=/ddn/storageIIT/humanbrain/analytics/52/NISL/B_52_MTB10-SL_65-ST_NISL-SE_391_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}';
+    const mapsiz = [21384, 25984];
+    const zoomifySource = new Zoomify({
+      url: mapurl,
+      size: mapsiz,
+      crossOrigin: "anonymous",
+      tierSizeCalculation: 'truncated',
+      imageSmoothing: false,
+      tileSize: 2048
+    });
+
+    const imageLayer = new TileLayer({
+      source: zoomifySource
+    });
+
+    const extent = zoomifySource.getTileGrid().getExtent();
+
+    const map = new Map({
+      target: 'map',
+      layers: [imageLayer, vectorLayer],
+      view: new View({
+        extent: extent,
+        rotation: (90 * Math.PI / 180),
+        zoom: 10,
+        minZoom: 8,
+        maxZoom: 19
+      }),
+      controls: ol.control.defaults({ rotate: false })
+    });
+
+    map.getView().fit(extent);
+    map.getView().setRotation(0); // Apply final desired rotation
+  </script>
+</body>
+</html>

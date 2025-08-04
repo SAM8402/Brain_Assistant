@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 100%;
+        width: 100%;
+      }
+      .controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+      }
+      button {
+        padding: 8px 12px;
+        margin-right: 5px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #45a049;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/build/ol.js"></script>
+    <title>Atlas Viewer with Animation</title>
+</head>
+<body>
+<div id="map" class="map"></div>
+<div class="controls">
+  <button id="animate-button">Animate Regions</button>
+  <button id="reset-button">Reset</button>
+</div>
+<script type="text/javascript">
+
+const Feature = ol.Feature;
+const Map = ol.Map;
+const View = ol.View;
+const GeoJSON = ol.format.GeoJSON;
+const Circle = ol.geom.Circle;
+const Point = ol.geom.Point;
+const LineString = ol.geom.LineString;
+const Icon = ol.style.Icon;
+const TileLayer = ol.layer.Tile;
+const VectorLayer = ol.layer.Vector;
+const OSM = ol.source.OSM;
+const VectorSource = ol.source.Vector;
+const CircleStyle = ol.style.Circle;
+const Fill = ol.style.Fill;
+const Stroke = ol.style.Stroke;
+const Style = ol.style.Style;
+const Zoomify = ol.source.Zoomify;
+
+const geojsonUrl = 'https://apollo2.humanbrain.in/iipsrv/data/storageIIT/humanbrain/analytics/222/appData/atlasEditor/189/NISL/1000/222-NISL-1000-FlatTree::IIT:V1:SS-100:306:1000:1000.json';
+const mapurl = "http://dev2mani.humanbrain.in:9081/fcgi-bin/iipsrv.fcgi?FIF=/data/storageIIT/humanbrain/analytics/222/NISL/B_222_FB74-SL_334-ST_NISL-SE_1000_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}"
+const mapsiz = [72754,86284];
+const rigidrotation = 90;
+
+let vectorSource;
+let originalFeatures = [];
+let animationInProgress = false;
+
+async function getGeoJSON(url) {
+    try {
+        const response = await fetch(url);
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching GeoJSON:', error);
+        return null;
+    }
+}
+
+function styleFunction(feature, opacityAtlas = '99') {
+    if(typeof(opacityAtlas) == "number") {
+      opacityAtlas = '99'
+    }
+    var data = feature.get('data')
+    var clr = '#FF000070'
+
+    if (data !== undefined)
+      if (data.color_hex_triplet != undefined){
+      clr =  data.color_hex_triplet;
+      if(!data.color_hex_triplet.startsWith('#')){
+        clr= '#'+clr
+      }
+    }
+
+    if(clr.length==7) {
+      var atlasClr = clr;
+      clr = clr + opacityAtlas
+    }
+
+    var st = [
+      new Style({
+        zIndex:-1,
+        stroke: new Stroke({
+          color: atlasClr,
+          width: 2.5,
+        }),
+        fill: new Fill({
+          color: clr
+        }),
+      }),
+    ];
+
+    var geometry = feature.getGeometry();
+    if (geometry.getType() === 'LineString') {
+      var coordinates = geometry.getCoordinates();
+  
+      if (coordinates.length >= 2) {
+        var start = coordinates[coordinates.length - 2];
+        var end = coordinates[coordinates.length - 1];
+        
+        var dx = end[0] - start[0];
+        var dy = end[1] - start[1];
+        var rotation = Math.atan2(dy, dx);
+  
+        st.push(new Style({
+              stroke: new Stroke({
+                color: '#000000',
+                width: 3,
+              })
+            }));
+        
+        st.push(new Style({
+          geometry: new Point(end),
+          image: new Icon({
+            src: 'https://apollo2.humanbrain.in/viewer/assets/images/colorsvg/right_arrow.svg',
+            anchor: [0.75, 0.5],
+            rotateWithView: true,
+            rotation: -rotation,
+          })
+        }));
+      } 
+    }
+    st.push(new Style({
+        zIndex:-1,
+        image: new CircleStyle({
+          radius: 5.9,
+          stroke: new Stroke({
+            color: atlasClr,
+            width: 1,
+          }),
+          fill: new Fill({
+            color: clr,
+          }),
+        }),
+        geometry: function (feature) {
+          var coordinates = feature.getGeometry().getCoordinates();
+          return new Point(coordinates);
+        },
+      }));
+
+    return st;
+};
+
+// Function to animate drawing of a polygon feature
+function animateFeatureDraw(feature, duration, callback) {
+  const geometry = feature.getGeometry();
+  let coords;
+  let isPolygon = false;
+  
+  // Handle different geometry types
+  if (geometry.getType() === 'Polygon') {
+    coords = geometry.getCoordinates()[0]; // Get exterior ring
+    isPolygon = true;
+  } else if (geometry.getType() === 'Point') {
+    // For points, just add it directly after a delay
+    setTimeout(() => {
+      vectorSource.addFeature(feature);
+      if (callback) callback();
+    }, duration);
+    return;
+  } else if (geometry.getType() === 'LineString') {
+    coords = geometry.getCoordinates();
+  } else {
+    // Unsupported geometry type
+    vectorSource.addFeature(feature);
+    if (callback) callback();
+    return;
+  }
+  
+  let startTime = null;
+  const customStyle = feature.getStyle();
+  
+  // Extract style information
+  let strokeColor = '#3399ff';
+  let strokeWidth = 2.5;
+  let fillColor = 'rgba(51, 153, 255, 0.4)';
+  
+  if (customStyle) {
+    const styleFunction = customStyle;
+    if (typeof styleFunction === 'function') {
+      const styles = styleFunction(feature);
+      if (styles && styles.length > 0) {
+        const style = styles[0];
+        if (style.getStroke()) {
+          strokeColor = style.getStroke().getColor();
+          strokeWidth = style.getStroke().getWidth();
+        }
+        if (style.getFill()) {
+          fillColor = style.getFill().getColor();
+        }
+      }
+    }
+  }
+  
+  // Create a line feature for animation
+  const lineFeature = new Feature({
+    geometry: new LineString([])
+  });
+  
+  lineFeature.setStyle(new Style({
+    stroke: new Stroke({
+      color: strokeColor,
+      width: strokeWidth + 1,
+      lineDash: [10, 10]
+    })
+  }));
+  
+  vectorSource.addFeature(lineFeature);
+  
+  // Animation function
+  function animate(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = timestamp - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    if (progress < 1) {
+      // Calculate how many points to show based on progress
+      const pointCount = Math.floor(progress * coords.length);
+      
+      // Update line with visible points
+      const visiblePoints = coords.slice(0, pointCount + 1);
+      lineFeature.getGeometry().setCoordinates(visiblePoints);
+      
+      // Continue animation
+      requestAnimationFrame(animate);
+    } else {
+      // Animation complete - show full polygon
+      vectorSource.removeFeature(lineFeature);
+      vectorSource.addFeature(feature);
+      
+      // Flash effect for completed feature
+      let flashCount = 0;
+      const maxFlashes = 3;
+      
+      function flash() {
+        if (flashCount < maxFlashes) {
+          // Toggle between highlight and original style
+          if (flashCount % 2 === 0) {
+            const highlightStyle = [new Style({
+              stroke: new Stroke({
+                color: 'white',
+                width: strokeWidth + 2
+              }),
+              fill: new Fill({
+                color: 'rgba(255, 255, 255, 0.7)'
+              })
+            })];
+            
+            if (!isPolygon) {
+              highlightStyle.push(new Style({
+                image: new CircleStyle({
+                  radius: 7,
+                  stroke: new Stroke({
+                    color: 'white',
+                    width: 2
+                  }),
+                  fill: new Fill({
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  })
+                })
+              }));
+            }
+            
+            feature.setStyle(highlightStyle);
+          } else {
+            feature.setStyle(customStyle);
+          }
+          flashCount++;
+          setTimeout(flash, 100);
+        } else {
+          // Final style - restore original
+          feature.setStyle(customStyle);
+          
+          if (callback) callback();
+        }
+      }
+      
+      flash();
+    }
+  }
+  
+  requestAnimationFrame(animate);
+}
+
+// Animate all features in sequence
+function animateAllFeatures() {
+  if (animationInProgress) return;
+  
+  animationInProgress = true;
+  document.getElementById('animate-button').disabled = true;
+  
+  // Clear existing features
+  vectorSource.clear();
+  
+  let index = 0;
+  
+  function animateNext() {
+    if (index < originalFeatures.length) {
+      const feature = originalFeatures[index];
+      const durationPerFeature = 800; // milliseconds per feature
+      
+      showArr = [33,17,16];
+      console.log(feature.values_.data.id);
+      if (showArr.includes(feature.values_.data.id) || true){
+        animateFeatureDraw(feature, durationPerFeature, () => {
+          index++;
+          setTimeout(animateNext, 200); // delay between features
+        });
+      } else {
+        index++;
+        setTimeout(animateNext, 0); // delay between features
+      }
+    //   animateFeatureDraw(feature, durationPerFeature, () => {
+    //     index++;
+    //     setTimeout(animateNext, 200); // delay between features
+    //   });
+    } else {
+      // All features animated
+      animationInProgress = false;
+      document.getElementById('animate-button').disabled = false;
+    }
+  }
+  
+  animateNext();
+}
+
+// Reset button handler - clear and re-add all features
+function resetFeatures() {
+  vectorSource.clear();
+  originalFeatures.forEach(feature => {
+    vectorSource.addFeature(feature);
+  });
+}
+
+// Call the function to get data
+getGeoJSON(geojsonUrl).then(geojsonData => {
+    const geojsonObject = geojsonData;
+
+    const vectorLayer = new VectorLayer({
+      transition: 0,
+      source: new VectorSource({
+        format: new GeoJSON(),
+        wrapX: false,
+      }),
+      style: styleFunction,
+    });
+
+    const zoomifySource = new Zoomify({
+      url: mapurl,
+      size: mapsiz,
+      crossOrigin: "anonymous",
+      tierSizeCalculation:'truncated',
+      imageSmoothing: false,
+      tileSize: 2048
+    });
+
+    const imagery = new TileLayer({
+      source: zoomifySource
+    });
+
+    const map = new Map({
+      layers: [
+        imagery,
+        vectorLayer,
+      ],
+      target: 'map',
+      view: new View({
+        zoom: 10,
+        rotation: (rigidrotation * Math.PI / 180)
+      }),
+    });
+
+    map.getView().fit(imagery.getSource().getTileGrid().getExtent());
+    var centerMap = map.getView().getCenter();
+
+    vectorSource = vectorLayer.getSource();
+
+    var features = vectorSource.getFormat().readFeatures(geojsonObject);
+    features.forEach(element => {
+      var elementRotate = element.getGeometry();
+      var xy = centerMap;
+      elementRotate = elementRotate.rotate((( rigidrotation)* Math.PI / 180),xy);
+    });
+    
+    vectorSource.addFeatures(features);
+    
+    // Store original features for animation
+    originalFeatures = features.slice();
+    
+    vectorSource.getFeatures().forEach(element => {
+      element.setStyle(styleFunction);
+    });
+
+    // Set up button event listeners
+    document.getElementById('animate-button').addEventListener('click', animateAllFeatures);
+    document.getElementById('reset-button').addEventListener('click', resetFeatures);
+});
+</script>
+</body>
+</html>

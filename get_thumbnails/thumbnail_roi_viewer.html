@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Thumbnail Viewer</title>
+        <style>
+            html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .header{
+            margin: 0;
+            padding-left: 15px;
+            color: black;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .header p{
+            margin: 0;
+            padding-top: 5px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .image-grid-container {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .image-grid {
+            display: grid;
+            gap: 5px;
+            width: 100%;
+            height: 100%;
+            padding: 10px;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+
+        .image-grid-wrapper {
+            display: flex;
+            width: 200%;
+            transition: transform 0.5s ease-in-out;
+        }
+
+        .image-container {
+            position: relative;
+            border: 2px solid #444444;
+            padding: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            background-color: #f8f8f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100px;
+            height: 100px;
+        }
+
+        .green-dot {
+            width: 10px;
+            height: 10px;
+            background-color: green;
+            border-radius: 50%;
+            position: absolute;
+            top: 5px;
+            right: 5px;
+        }
+
+        .image-container:hover {
+            transform: scale(1.1);
+        }
+
+        .image-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .image-id {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            color: red;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .nav-buttons {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #eeeeee;
+            color: black;
+            border: 1px solid black;
+            border-radius: 3rem;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 2;
+        }
+
+        #prev {
+            left: 10px;
+        }
+
+        #next {
+            right: 10px;
+        }
+
+        .nav-buttons:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .selected {
+            border: 2px solid red !important;
+        }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <p>Thumbnail Viewer - Biosample: 222 </p>
+        </div>
+
+        <div class="container">
+            <button id="prev" class="nav-buttons" disabled>&#11164;</button>
+            <div class="image-grid-container">
+                <div class="image-grid-wrapper">
+                    <div id="image-grid-1" class="image-grid"></div>
+                    <div id="image-grid-2" class="image-grid"></div>
+                </div>
+            </div>
+            <button id="next" class="nav-buttons">&#11166;</button>
+        </div>
+
+        <script>
+            
+            const API_URL = "http://dev2kamal.humanbrain.in:8000/GW/getBrainThumbNailDetails/IIT/V1/SS-100:-1:-1";
+            const session_id = "186";
+            const biosample = "222";
+            const roi_sections = ["13","250","256","268","277","280","283","286","292","295","310","343","349","358","367","373","382","385","391","403","409","412","421","427","436","439","445","460","478","499","505","511","514","520","523"]
+            let imagesData = [];
+            let startIndex = 0;
+            let isAnimating = false;
+
+            const gridWrapper = document.querySelector(".image-grid-wrapper");
+            const grid1 = document.getElementById("image-grid-1");
+            const grid2 = document.getElementById("image-grid-2");
+            const prevButton = document.getElementById("prev");
+            const nextButton = document.getElementById("next");
+
+            async function fetchImages() {
+                try {
+                    const response = await fetch(API_URL);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    const targetSeriesName = "NISSL";   //---------------series type-------- 
+                    const selectedSeries = data.find(item => item.seriesType === targetSeriesName);
+                    imagesData = selectedSeries?.thumbnails ?? []; 
+                    if (imagesData.length === 0) {
+                        console.warn("No images found for the selected series.");
+                        return;
+                    }
+                    renderImages(grid1, startIndex);
+                    updatePaginationButtons();
+                } catch (error) {
+                    console.error("Error fetching images:", error);
+                }
+            }
+
+            function calculateColumns() {
+                const containerWidth = document.querySelector(".image-grid-container").clientWidth;
+                return Math.floor(containerWidth / 110); // Assuming column width ~110px
+            }
+
+            function calculateRows() {
+                return Math.floor(window.innerHeight / 110); // Assuming row height ~150px
+            }
+
+            function preloadImages() {
+                imagesData.forEach(image => {
+                    const img = new Image();
+                    img.src = image.thumbnailUrl;
+                });
+            }
+
+            function createImageElement(image, index) {
+                const container = document.createElement("div");
+                container.classList.add("image-container");
+                container.setAttribute("data-section-no", image.sectionNo);
+
+                const img = document.createElement("img");
+                img.src = image.thumbnailUrl;
+                
+                img.onerror = function () {
+                    img.style.display = "none"; // Hides the broken image icon
+                };
+
+                const label = document.createElement("span");
+                label.classList.add("image-id");
+                label.textContent = image.sectionNo;
+
+                if (image.is_annotation === 1) {
+                    const greenDot = document.createElement("div");
+                    greenDot.classList.add("green-dot");
+                    container.appendChild(greenDot);
+                }
+
+                container.appendChild(img);
+                container.appendChild(label);
+
+                return container;
+            }
+
+             document.querySelector(".image-grid-container").addEventListener("click", async (event) => {
+                const imageContainer = event.target.closest(".image-container");
+                if (!imageContainer) return;
+
+                const previouslySelected = document.querySelector(".image-container.selected");
+                if (previouslySelected) {
+                    previouslySelected.classList.remove("selected");
+                }
+
+                imageContainer.classList.add("selected");
+
+                const payload = {
+                    id: session_id,
+                    tool_name: 'thumbnail_viewer',
+                    params: {
+                        biosample: biosample,
+                        section: imageContainer.getAttribute("data-section-no"),
+                    },
+                };
+
+                try {
+                    const response = await fetch("http://dgx3.humanbrain.in:10605/context", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+
+                    const data = await response.json();
+                    console.log("Server Response:", data);
+                } catch (error) {
+                    console.error("Error sending data to context API:", error);
+                }
+            });
+
+            // function renderImages(grid, index) {
+            //     grid.innerHTML = "";
+            //     const columns = calculateColumns();
+            //     const rowHeight = 150; 
+            //     const rows = Math.ceil(window.innerHeight / rowHeight);
+            //     const imagesToShow = Math.min(columns * rows, imagesData.length - index); 
+
+            //     grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+            //     let columnWiseImages = Array.from({ length: rows }, () => Array(columns).fill(null));
+
+            //     let imageIdx = index;
+            //     for (let col = 0; col < columns; col++) {
+            //         for (let row = 0; row < rows; row++) {
+            //             if (imageIdx < imagesData.length) {
+            //                 columnWiseImages[row][col] = imagesData[imageIdx];
+            //                 imageIdx++;
+            //             }
+            //         }
+            //     }
+
+            //     columnWiseImages.flat().forEach((image) => {
+            //         if (image) {
+            //             grid.appendChild(createImageElement(image, index));
+            //         }
+            //     });
+            // }
+            function renderImages(grid, index) {
+                grid.innerHTML = "";
+                const columns = calculateColumns();
+                const rowHeight = 150; 
+                const rows = Math.ceil(window.innerHeight / rowHeight);
+                const imagesToShow = Math.min(columns * rows, imagesData.length - index); 
+
+                grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+                let columnWiseImages = Array.from({ length: rows }, () => Array(columns).fill(null));
+
+                let imageIdx = index;
+                // First, filter the images to include only those whose sectionNo is in roi_sections
+                const filteredImages = imagesData.filter(image => roi_sections.includes(image.sectionNo.toString()));
+
+                // Then, sort the filtered images by sectionNo in ascending order
+                filteredImages.sort((a, b) => a.sectionNo - b.sectionNo);
+
+                // Assign the sorted images to the grid
+                for (let col = 0; col < columns; col++) {
+                    for (let row = 0; row < rows; row++) {
+                        if (imageIdx < filteredImages.length) {
+                            columnWiseImages[row][col] = filteredImages[imageIdx];
+                            imageIdx++;
+                        }
+                    }
+                }
+
+    // Append the sorted and filtered images to the grid
+    columnWiseImages.flat().forEach((image) => {
+        if (image) {
+            grid.appendChild(createImageElement(image, index));
+        }
+    });
+}
+
+            function scrollImages(direction) {
+                if (isAnimating) return;
+                isAnimating = true;
+
+                const columns = calculateColumns();
+                const rows = Math.ceil(window.innerHeight / 150);
+                const imagesPerPage = columns * rows;
+                let nextIndex = startIndex;
+
+                if (direction === "next") {
+                    nextIndex += imagesPerPage;
+                } else {
+                    nextIndex -= imagesPerPage;
+                }
+
+                // Ensure nextIndex stays within bounds
+                nextIndex = Math.max(0, Math.min(nextIndex, imagesData.length - imagesPerPage));
+
+                if (nextIndex === startIndex) {
+                    isAnimating = false;
+                    return;
+                }
+
+                const newGrid = startIndex < nextIndex ? grid2 : grid1;
+                renderImages(newGrid, nextIndex);
+
+                gridWrapper.style.transition = "transform 0.5s ease-in-out";
+                gridWrapper.style.transform = `translateX(${startIndex < nextIndex ? "-100%" : "100%"})`;
+
+                setTimeout(() => {
+                    gridWrapper.style.transition = "none";
+                    gridWrapper.style.transform = "translateX(0)";
+
+                    if (startIndex < nextIndex) {
+                        grid1.innerHTML = grid2.innerHTML;
+                    } else {
+                        grid2.innerHTML = grid1.innerHTML;
+                    }
+
+                    startIndex = nextIndex;
+                    isAnimating = false;
+                    updatePaginationButtons();
+                }, 500);
+            }
+
+
+            function updatePaginationButtons() {
+                const columns = calculateColumns();
+                const rows = Math.ceil(window.innerHeight / 150);
+                const imagesPerPage = columns * rows;
+
+                prevButton.disabled = startIndex === 0;
+                nextButton.disabled = startIndex + imagesPerPage >= imagesData.length;
+            }
+
+
+
+            prevButton.addEventListener("click", () => scrollImages("prev"));
+            nextButton.addEventListener("click", () => scrollImages("next"));
+            window.addEventListener("resize", () => renderImages(grid1, startIndex));
+
+            fetchImages();
+        </script>
+
+    </body>
+    </html>
+        

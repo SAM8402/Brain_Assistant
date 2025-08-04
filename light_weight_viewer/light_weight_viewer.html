@@ -1,0 +1,396 @@
+<!doctype html>
+              <html lang="en" style="height:100%;">
+              <head>
+                  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/css/ol.css" type="text/css">
+                  <style>
+                      html, body {
+                        margin: 0;
+                        padding: 0;
+                        overflow: hidden;
+                    }
+                    .header{
+                        margin: 0;
+                        padding-left: 15px;
+                        color: black;
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    }
+
+                    .header p{
+                        margin: 0;
+                        padding-top: 5px;
+                        font-size: 12px;
+                        font-weight: bold;
+                    }
+                    .name-container{
+                        display: flex;
+                        width: 100%;
+                        height: 0;
+                    }
+                    .feature-name{
+                        font-size: 20px;
+                        padding: 10px 40px;
+                        z-index: 3;
+                    }
+                    .map {
+                      height:100%;
+                      width:100%;
+                    }
+                    
+                    /* Opacity slider styles */
+                    .slider-container {
+                        position: absolute;
+                        left: 15px;
+                        top: 55%;
+                        transform: translateY(-50%);
+                        height: 120px;
+                        width: 20px;
+                        background-color: rgba(255, 255, 255, 0.7);
+                        border-radius: 8px;
+                        padding: 10px 0;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+                        z-index: 1000;
+                    }
+                    
+                    #opacity-slider {
+                        writing-mode: bt-lr;
+                        -webkit-appearance: slider-vertical;
+                        width: 3px;
+                        height: 100px;
+                        padding: 0;
+                        margin: 0;
+                    }
+                    
+                    /* Make slider thumb (handle) smaller */
+                    #opacity-slider::-webkit-slider-thumb {
+                        transform: scale(0.6);
+                        cursor: pointer;
+                    }
+                    
+                    /* For Firefox */
+                    #opacity-slider::-moz-range-thumb {
+                        transform: scale(0.6);
+                        cursor: pointer;
+                    }
+                    
+                    /* For IE/Edge */
+                    #opacity-slider::-ms-thumb {
+                        transform: scale(0.6);
+                        cursor: pointer;
+                    }
+                    
+                    .opacity-value {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        font-size: 10px;
+                        margin-top: 5px;
+                    }
+                  </style>
+                  <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/build/ol.js"></script>
+                  <title>Atlas Viewer</title>
+                  </head>
+                  <body style="height:100%;">
+                        <div class="header">
+                            <p>Atlas Viewer - Biosample: 222 Section:1000</p>
+                        </div>
+                        <div class="name-container">
+                            <span class="feature-name" id="feature-name"></span>
+                        </div>
+                        <div id="map" class="map"></div>
+                        
+                        <!-- Opacity slider control -->
+                        <div class="slider-container">
+                            <input type="range" min="0" max="99" value="50" class="slider" id="opacity-slider" orient="vertical">
+                            <div class="opacity-value" id="opacity-value">50</div>
+                        </div>
+                        
+                        <script type="text/javascript">
+
+                        const Feature = ol.Feature;
+                        const Map = ol.Map;
+                        const View = ol.View;
+                        const GeoJSON = ol.format.GeoJSON;
+                        const Circle = ol.geom.Circle;
+                        const Point = ol.geom.Point;
+                        const Icon = ol.style.Icon;
+                        const TileLayer = ol.layer.Tile;
+                        const VectorLayer = ol.layer.Vector;
+                        const OSM = ol.source.OSM;
+                        const VectorSource = ol.source.Vector;
+                        const CircleStyle = ol.style.Circle;
+                        const Fill = ol.style.Fill;
+                        const Stroke = ol.style.Stroke;
+                        const Style = ol.style.Style;
+                        const Zoomify = ol.source.Zoomify;
+                        const Select = ol.interaction.Select;
+                        
+
+                        const geojsonUrl = 'https://apollo2.humanbrain.in/iipsrv/data/storageIIT/humanbrain/analytics/222/appData/atlasEditor/189/NISL/1000/222-NISL-1000-FlatTree::IIT:V1:SS-100:306:1000:1000.json'
+                        const mapurl = 'https://apollo2.humanbrain.in/iipsrv/fcgi-bin/iipsrv.fcgi?FIF=/data/storageIIT/humanbrain/analytics/222/NISL/B_222_FB74-SL_334-ST_NISL-SE_1000_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}'
+                        const mapsiz = [72754,86284];
+                        const rigidrotation = 90;
+                        const biosample = '222';
+                        const section = '1000';
+                        const tool_name= 'mini_atlas';
+                        const session_id = 'None';
+                        const parsed_session_id = parseInt(session_id);
+                          
+                          
+                          // Global variable for opacity
+                          let opacityAtlas = '50';
+                          let vectorSource;
+
+                          async function getGeoJSON(url) {
+                              try {
+                                  const response = await fetch(url);
+                                  return await response.json();
+                              } catch (error) {
+                                  console.error('Error fetching GeoJSON:', error);
+                                  return null;
+                              }
+                          }
+
+                          function styleFunction(feature) {
+                              if(typeof(opacityAtlas) == "number") {    
+                              opacityAtlas = '50'
+                              }
+                              var data = feature.get('data')
+                              var clr = '#FF000070'
+
+                              if (data !== undefined && data.color_hex_triplet != undefined){
+                                  clr =  data.color_hex_triplet;
+                                  if(!data.color_hex_triplet.startsWith('#')){
+                                  clr= '#'+clr
+                                  }
+                              }
+
+                              if(clr.length==7) {
+                                  var atlasClr = clr;
+                                  clr = clr + opacityAtlas;
+                              }
+
+                              var st = [
+                                  new Style({
+                                  zIndex: -1,
+                                  stroke: new Stroke({
+                                      color: atlasClr,
+                                      width: 2.5,
+                                  }),
+                                  fill: new Fill({
+                                      color: clr
+                                  }),
+                                  }),
+                              ];
+
+                              var geometry = feature.getGeometry();
+                              if (geometry.getType() === 'LineString') {
+                                  var coordinates = geometry.getCoordinates();
+                                  if (coordinates.length >= 2) {
+                                  var start = coordinates[coordinates.length - 2];
+                                  var end = coordinates[coordinates.length - 1];
+                                  
+                                  var dx = end[0] - start[0];
+                                  var dy = end[1] - start[1];
+                                  var rotation = Math.atan2(dy, dx);
+
+                                  st.push(new Style({
+                                          stroke: new Stroke({
+                                          color: '#000000',
+                                          width: 3,
+                                          })
+                                      }));
+                                  
+                                  st.push(new Style({
+                                      geometry: new Point(end),
+                                      image: new Icon({
+                                      src: 'https://apollo2.humanbrain.in/viewer/assets/images/colorsvg/right_arrow.svg',
+                                      anchor: [0.75, 0.5],
+                                      rotateWithView: true,
+                                      rotation: -rotation,
+                                      })
+                                  }));
+                                  } 
+                              }
+                              
+                              st.push(new Style({
+                                  zIndex: -1,
+                                  image: new CircleStyle({
+                                  radius: 5.9,
+                                  stroke: new Stroke({
+                                      color: atlasClr,
+                                      width: 1,
+                                  }),
+                                  fill: new Fill({
+                                      color: clr,
+                                  }),
+                                  }),
+                                  geometry: function (feature) {
+                                  var coordinates = feature.getGeometry().getCoordinates();
+                                  return new Point(coordinates);
+                                  },
+                              }));
+
+                              return st;
+                          }
+                          
+                          // Update all features with the new opacity
+                          function updateLayerOpacity() {
+                              if (vectorSource) {
+                                  vectorSource.getFeatures().forEach(feature => {
+                                      feature.setStyle(styleFunction(feature));
+                                  });
+                              }
+                          }
+
+                          // Call the function to get data
+                          getGeoJSON(geojsonUrl).then(geojsonData => {
+                              const geojsonObject = geojsonData;
+
+                              const vectorLayer = new VectorLayer({
+                                  transition: 0,
+                                  source: new VectorSource({
+                                      format: new GeoJSON(),
+                                      wrapX: false,
+                                  }),
+                                  style: styleFunction,
+                              });
+
+                              const zoomifySource = new Zoomify({
+                                  url: mapurl,
+                                  size: mapsiz,
+                                  crossOrigin: "anonymous",
+                                  tierSizeCalculation: 'truncated',
+                                  imageSmoothing: false,
+                                  tileSize: 2048
+                              });
+
+                              const imagery = new TileLayer({
+                                  source: zoomifySource
+                              });
+
+                              const extent = zoomifySource.getTileGrid().getExtent();
+
+                              const map = new Map({
+                                  layers: [imagery, vectorLayer],
+                                  target: 'map',
+                                  view: new View({
+                                      zoom: 10,
+                                      minZoom: 9, 
+                                      maxZoom: 19,
+                                      rotation: (rigidrotation * Math.PI / 180),
+                                      extent: extent
+                                  }),
+                                  controls: ol.control.defaults({
+                                    rotate: false 
+                                })
+                              });
+
+                              map.getView().fit(imagery.getSource().getTileGrid().getExtent());
+                              var centerMap = map.getView().getCenter();
+                              vectorSource = vectorLayer.getSource();
+
+                              var features = vectorSource.getFormat().readFeatures(geojsonObject);
+                              features.forEach(element => {
+                                  var elementRotate = element.getGeometry();
+                                  var xy = centerMap;
+                                  elementRotate = elementRotate.rotate((( rigidrotation) * Math.PI / 180), xy);
+                              });
+                              vectorSource.addFeatures(features);
+                              vectorSource.getFeatures().forEach(element => {
+                                  element.setStyle(styleFunction(element));
+                              });
+
+                              
+                              const selectInteraction = new Select({
+                                  condition: ol.events.condition.singleClick,
+                                  style: null, // Disable default OpenLayers selection style
+                              });
+
+                              map.addInteraction(selectInteraction);
+
+                              selectInteraction.on('select', async function (e) {
+                                vectorSource.getFeatures().forEach(feature => {
+                                    feature.setStyle(styleFunction(feature));  
+                                });
+
+                                e.selected.forEach(feature => {
+                                    feature.setStyle(new Style({
+                                        stroke: new Stroke({
+                                            color: 'red',  
+                                            width: 3
+                                        }),
+                                        fill: new Fill({
+                                            color: 'transparent'
+                                        })
+                                    }));
+                                });
+
+                                if (e.selected.length > 0) {
+                                    let feature = e.selected[0].getProperties();
+
+                                    document.getElementById("feature-name").textContent = ` ${feature.data.name}`;
+
+                                    // Prepare the payload for the POST request
+                                    const payload = {
+                                        id: parsed_session_id,
+                                        tool_name: tool_name,
+                                        params: {
+                                            id: feature.data.id,
+                                            name: feature.data.name,
+                                            biosample: biosample,
+                                            section: section
+
+                                        },
+
+                                    };
+
+                                    try {
+                                        const response = await fetch("http://dgx3.humanbrain.in:10605/context", {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json"
+                                            },
+                                            body: JSON.stringify(payload)
+                                        });
+                                        const data = await response.json();
+                                        console.log("Server Response:", data);
+                                    } catch (error) {
+                                        console.error("Error sending data to context API:", error);
+                                    }
+                                } else {
+                                    document.getElementById("feature-name").textContent = "";
+                                }
+                            });
+                            
+                            // Set up opacity slider interaction
+                            let lastOpacity = opacityAtlas;
+                            let throttleTimeout = null;
+
+                            const opacitySlider = document.getElementById("opacity-slider");
+                            const opacityValueDisplay = document.getElementById("opacity-value");
+
+                            function throttledOpacityUpdate(newOpacity) {
+                                if (newOpacity === lastOpacity) return;
+                                lastOpacity = newOpacity;
+
+                                opacityAtlas = newOpacity;
+                                opacityValueDisplay.textContent = opacityAtlas;
+                                updateLayerOpacity();
+                            }
+
+                            opacitySlider.addEventListener("input", function () {
+                                const newOpacity = this.value.toString().padStart(2, '0');
+
+                                if (throttleTimeout) clearTimeout(throttleTimeout);
+
+                                throttleTimeout = setTimeout(() => {
+                                    throttledOpacityUpdate(newOpacity);
+                                }, 10); 
+                            });
+                        
+                        });
+                      </script>
+                  </body>
+              </html>
+          

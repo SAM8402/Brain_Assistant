@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en" style="height:100%;">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/css/ol.css" type="text/css">
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; width: 100%; font-family: Arial, sans-serif; }
+        .main-container { width: 100%; height: 100%; position: relative; }
+
+        /* Default: JP2 Fullscreen, BFI Thumbnail */
+        #jp2_map {
+            width: 100%;
+            height: 100%;
+            background-color: #f0f0f0;
+            position: relative;
+        }
+
+        /* BFI Thumbnail Styling (when JP2 is fullscreen) */
+        .bfi-thumbnail-container:not(.fullscreen-mode) {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 270px;
+            height: 220px;
+            border: 2px solid #555;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.3);
+            z-index: 1001;
+            background-color: white;
+            overflow: hidden; 
+        }
+
+        .bfi-thumbnail-container:not(.fullscreen-mode) .bfi-image-viewport {
+            position: absolute;
+            width: 350px; 
+            height: 300px; 
+            left: 50%;
+            top: 50%;
+            transform: translate(-58%, -45%); 
+        }
+
+        .bfi-thumbnail-container:not(.fullscreen-mode) #bfi_thumbnail_img {
+            display: block;
+            width: 100%; 
+            height: auto; 
+        }
+
+        .bfi-thumbnail-container:not(.fullscreen-mode) .bfi-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; 
+            height: 100%; 
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* BFI Fullscreen Styling */
+        .bfi-thumbnail-container.fullscreen-mode {
+            position: absolute; 
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            box-shadow: none;
+            z-index: 1000;
+            overflow: visible; 
+        }
+
+        .bfi-thumbnail-container.fullscreen-mode .bfi-image-viewport {
+            position: static; 
+            width: 100%;
+            height: 100%;
+            transform: none; 
+        }
+
+        .bfi-thumbnail-container.fullscreen-mode #bfi_thumbnail_img {
+            display: block; 
+            width: 100%;
+            height: 100%;
+            object-fit: contain; 
+        }
+
+        .bfi-thumbnail-container.fullscreen-mode .bfi-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* Switched: JP2 Thumbnail, BFI Fullscreen */
+        #jp2_map.thumbnail-mode {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            height: 250px;
+            border: 2px solid #555;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.3);
+            z-index: 1001;
+        }
+        #jp2_map.thumbnail-mode .ol-zoomslider {
+            display: none;
+        }
+
+        .coordinates { position: absolute; bottom: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.7); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 1000; }
+        #bfi_target_coordinates { bottom: 30px; }
+        #jp2_target_coordinates { bottom: 50px; }
+
+        .bfi-thumbnail-container .caption { font-size: 10px; text-align: center; padding: 3px; background-color: rgba(255, 255, 255, 0.8); color: #333; position: absolute; bottom: 0; left:0; width: 100%; box-sizing: border-box;}
+        .bfi-overlay .pointer-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;}
+        .bfi-overlay .vline, .bfi-overlay .hline { position: absolute; background: blue; display: none; pointer-events: none;}
+        .bfi-overlay .vline { width: 1px; height: 100%; top: 0; }
+        .bfi-overlay .hline { height: 1px; width: 100%; left: 0; }
+        
+        .test-marker-bfi { 
+            position: absolute; 
+            width: 10px; height: 10px; 
+            background-color: limegreen; 
+            border: 1px solid darkgreen; 
+            border-radius: 50%; 
+            transform: translate(-50%, -50%); 
+            z-index: 10; 
+            pointer-events: none;
+        }
+
+        #bfi_view_rect {
+            position: absolute;
+            border: 1.5px solid red;
+            background-color: transparent;
+            pointer-events: auto;
+            cursor: grab;
+            z-index: 5;
+            display: none;
+        }
+
+        /* Controls styling */
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 2000;
+            background: rgba(240, 240, 240, 0.9);
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 15px; /* Spacing between dropdown groups */
+            align-items: center;
+        }
+        #controls label {
+            margin-right: 5px;
+            font-size: 14px;
+        }
+        #controls select {
+            padding: 4px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        #switchViewBtn {
+            position: fixed;
+            top: 60px; /* Moved down to accommodate controls */
+            left: 10px;
+            z-index: 2000; /* Ensure it's above other elements if controls are also 2000 */
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #switchViewBtn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/build/ol.js"></script>
+</head>
+<body style="height:100%;">
+    <div id="controls">
+        <div>
+            <label for="biosampleIdSelect">Biosample ID:</label>
+            <select id="biosampleIdSelect">
+                <!-- Options populated by JS -->
+            </select>
+        </div>
+        <div>
+            <label for="sliceNumberSelect">Slice Number:</label>
+            <select id="sliceNumberSelect">
+                <!-- Options populated by JS -->
+            </select>
+        </div>
+    </div>
+    <button id="switchViewBtn">View BFI Fullscreen</button>
+
+    <div class="main-container">
+        <div id="jp2_map"></div>
+        <div id="mouse_coordinates" class="coordinates">JP2 Mouse: N/A</div>
+        <div id="bfi_target_coordinates" class="coordinates" style="bottom: 30px;">BFI Target: N/A</div>
+        <div id="jp2_target_coordinates" class="coordinates" style="bottom: 50px;">JP2 Target: N/A</div>
+
+        <div class="bfi-thumbnail-container" id="bfi_thumb_wrap">
+            <div class="bfi-image-viewport" id="bfi_image_viewport_el">
+                <img id="bfi_thumbnail_img" src="" alt="BFI Thumbnail"> 
+                <div class="bfi-overlay" id="bfi_thumb_overlay">
+                     <div id="bfi_view_rect"></div>
+                    <div class="pointer-lines" id="bfi_hover_crosshair">
+                        <div class="vline"></div>
+                        <div class="hline"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="caption">BFI Slice (Rotated)</div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // --- Data injected by Flask/backend ---
+        const jp2MapUrl = {{ jp2_map_url | safe }};
+        const jp2FullSize = {{ jp2_full_size | safe }};
+        const jp2InitialViewRotationDeg = {{ jp2_initial_view_rotation_deg | safe }};
+        const bfiImageUrl = {{ bfi_image_url | safe }};
+        const bfiCssRotationDeg = {{ bfi_css_rotation_deg | safe }};
+        let bfiNaturalWidth = 0; 
+        let bfiNaturalHeight = 0; 
+        let bfiLoaded = false;
+
+        const H_jp2_to_bfi = {{ h_jp2_to_bfi | safe }};
+        let H_bfi_to_jp2 = null;
+        
+        const currentBiosampleId = {{ current_biosample_id | safe }}; 
+        const currentSliceNumber = {{ current_slice_number | safe }};
+        
+        // DOM Elements
+        const coordinatesDisplay = document.getElementById('mouse_coordinates');
+        const bfiTargetCoordinatesDisplay = document.getElementById('bfi_target_coordinates');
+        const jp2TargetCoordinatesDisplay = document.getElementById('jp2_target_coordinates');
+        const bfiThumbnailContainer = document.getElementById('bfi_thumb_wrap');
+        const bfiThumbnailImg = document.getElementById('bfi_thumbnail_img');
+        const bfiThumbOverlay = document.getElementById('bfi_thumb_overlay');
+        
+        let olMap;
+        let view;
+        let jp2TestMarkerLayer; 
+        let jp2HoverMarkerLayer;
+
+        // Send coordinates to the parent window
+        function sendCoordinatesToParent(jp2X, jp2Y, bfiX, bfiY, type = 'coordinate_update') {
+            if (window.parent && window.parent !== window) {
+                try {
+                    const message = {
+                        type: type,
+                        jp2_coordinates: jp2X !== null ? { x: jp2X, y: jp2Y } : null,
+                        bfi_coordinates: bfiX !== null ? { x: bfiX, y: bfiY } : null,
+                        timestamp: Date.now(),
+                        biosample_id: currentBiosampleId,
+                        slice_number: currentSliceNumber,
+                        is_live: type === 'live_tracking'
+                    };
+                    window.parent.postMessage(message, '*');
+                    console.log('Sent coordinates to parent:', message);
+                } catch (error) {
+                    console.error('Error sending message to parent:', error);
+                }
+            }
+        }
+
+        // Handle mouse move on JP2 map
+        function handleJP2MouseMove(event) {
+            const pixel = olMap.getEventPixel(event.originalEvent);
+            const coordinate = olMap.getCoordinateFromPixel(pixel);
+            
+            if (coordinate) {
+                const jp2X_img = coordinate[0];
+                const jp2Y_img = -coordinate[1]; // Convert back from OL coordinates
+                coordinatesDisplay.textContent = `JP2 Mouse: X=${jp2X_img.toFixed(0)}, Y=${jp2Y_img.toFixed(0)}`;
+                
+                if (H_jp2_to_bfi) {
+                    const bfiCoords = applyHomography([jp2X_img, jp2Y_img], H_jp2_to_bfi);
+                    if (bfiCoords) {
+                        const [bfiX_nat, bfiY_nat] = bfiCoords;
+                        drawOnBFIOverlay(bfiX_nat, bfiY_nat, false);
+                        sendCoordinatesToParent(jp2X_img, jp2Y_img, bfiX_nat, bfiY_nat, 'live_tracking');
+                    }
+                }
+            }
+        }
+
+        // Handle mouse move on BFI
+        function handleBFIMouseMove(event) {
+            const coords = getBFIMouseRelatedCoords(event, bfiThumbOverlay);
+            if (coords) {
+                const { bfiX_nat, bfiY_nat } = coords;
+                drawOnBFIOverlay(bfiX_nat, bfiY_nat, false);
+
+                if (H_bfi_to_jp2) {
+                    const jp2Coords = applyHomography([bfiX_nat, bfiY_nat], H_bfi_to_jp2);
+                    if (jp2Coords) {
+                        const [jp2X_img, jp2Y_img] = jp2Coords;
+                        drawMarkerOnJP2(jp2X_img, jp2Y_img, true);
+                        sendCoordinatesToParent(jp2X_img, jp2Y_img, bfiX_nat, bfiY_nat, 'live_tracking');
+                    }
+                }
+            }
+        }
+
+        // Handle mouse leave events
+        function handleMouseLeave() {
+            coordinatesDisplay.textContent = "JP2 Mouse: N/A";
+            hideCrosshairOnBFI();
+            hideHoverMarkerOnJP2();
+            sendCoordinatesToParent(null, null, null, null, 'mouse_leave');
+        }
+
+        // Initialize the JP2 map with mouse event listener
+        function initializeJP2Map() {
+            const zoomifySource = new ol.source.Zoomify({
+                url: jp2MapUrl,
+                size: jp2FullSize,
+                crossOrigin: "anonymous",
+                tierSizeCalculation: 'truncated',
+                imageSmoothing: false,
+                tileSize: 2048
+            });
+            const tileLayer = new ol.layer.Tile({ source: zoomifySource });
+            const imageExtent = zoomifySource.getTileGrid().getExtent();
+            const pixelProjection = new ol.proj.Projection({ code: 'pixel-coords', units: 'pixels', extent: imageExtent });
+
+            view = new ol.View({
+                projection: pixelProjection,
+                extent: imageExtent,
+                rotation: (jp2InitialViewRotationDeg * Math.PI / 180),
+                constrainOnlyCenter: true,
+                maxZoom: 10,
+                minZoom: 0
+            });
+
+            jp2TestMarkerLayer = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 7,
+                        fill: new ol.style.Fill({ color: 'limegreen' }),
+                        stroke: new ol.style.Stroke({ color: 'darkgreen', width: 2 })
+                    })
+                }),
+                zIndex: 10
+            });
+
+            jp2HoverMarkerLayer = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 5,
+                        fill: new ol.style.Fill({ color: 'rgba(255, 0, 0, 0.8)' }),
+                        stroke: new ol.style.Stroke({ color: 'black', width: 1 })
+                    })
+                }),
+                zIndex: 11
+            });
+
+            olMap = new ol.Map({
+                layers: [tileLayer, jp2TestMarkerLayer, jp2HoverMarkerLayer],
+                target: 'jp2_map',
+                view: view,
+                controls: ol.control.defaults({ attribution: false, rotate: false, zoom: false })
+            });
+
+            olMap.on('pointermove', handleJP2MouseMove);
+            olMap.getViewport().addEventListener('mouseleave', handleMouseLeave);
+        }
+
+        // Handle BFI overlay mouse events
+        function initializeBFIOverlay() {
+            bfiThumbOverlay.addEventListener('mousemove', handleBFIMouseMove);
+            bfiThumbOverlay.addEventListener('mouseleave', handleMouseLeave);
+        }
+
+        // Initialize map and overlay when the window is loaded
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeJP2Map();
+            initializeBFIOverlay();
+        });
+    </script>
+</body>
+</html>
