@@ -99,6 +99,13 @@ class BrainRegionAssistant:
         
         return "Error: Could not connect to any Gemini model."
     
+    def validate_brain_region(self, region_name: str) -> bool:
+        """Check if the input is a valid brain region"""
+        prompt = f"""Is '{region_name}' a brain region or brain structure? Answer only with 'yes' or 'no'."""
+        
+        response = self._make_gemini_request(prompt).lower().strip()
+        return 'yes' in response
+    
     def fetch_brain_region_from_web(self, region_name: str) -> str:
         """Fetch brain region information from the web using Gemini"""
         prompt = f"""Provide a concise overview of the {region_name} brain region including:
@@ -110,18 +117,22 @@ class BrainRegionAssistant:
         
         return self._make_gemini_request(prompt)
     
-    def get_brain_region_info(self, region_name: str) -> str:
+    def get_brain_region_info(self, region_name: str) -> tuple:
         """Get detailed information about a brain region using Gemini"""
+        # First validate if it's a brain region
+        if not self.validate_brain_region(region_name):
+            return (False, f"'{region_name}' is not a brain region. Please enter a valid brain region name.")
+        
         self.current_region = region_name
         
         # Fetch information from web using Gemini
         self.region_context = self.fetch_brain_region_from_web(region_name)
-        return self.region_context
+        return (True, self.region_context)
     
     def ask_question(self, question: str) -> str:
         """Ask a question about the current brain region"""
         if not self.current_region:
-            return "Please specify a brain region first using 'region' command"
+            return "Please specify a brain region first using 'region <name>' command"
         
         prompt = f"""About the {self.current_region} brain region, answer: {question}
         Be concise and accurate."""
@@ -198,8 +209,13 @@ def main():
                 region_name = parts[1]
                 print(f"\nSearching for information about: {region_name}")
                 print("-" * 40)
-                info = assistant.get_brain_region_info(region_name)
+                is_valid, info = assistant.get_brain_region_info(region_name)
                 print(info)
+                
+                if is_valid:
+                    print("\n" + "-" * 40)
+                    print(f"Do you have any questions about the {region_name}?")
+                    print("Type 'yes' to ask questions or 'no' to see commands.")
                 
             elif command == 'ask' and len(parts) > 1:
                 question = parts[1]
@@ -207,7 +223,22 @@ def main():
                 print("-" * 40)
                 answer = assistant.ask_question(question)
                 print(answer)
+            
+            elif command in ['no', 'n']:
+                print("\n" + "=" * 50)
+                print("Commands:")
+                print("  region <name> - Get information about a brain region")
+                print("  ask <question> - Ask a question about the current region")
+                print("  quit - Exit the program")
+                print("=" * 50)
                 
+            elif command == 'yes' or command == 'y':
+                if assistant.current_region:
+                    print(f"\nWhat would you like to know about the {assistant.current_region}?")
+                    print("Use 'ask <your question>' to ask.")
+                else:
+                    print("Please specify a brain region first using 'region <name>'")
+                    
             else:
                 print("Invalid command. Use 'region <name>', 'ask <question>', or 'quit'")
                 
