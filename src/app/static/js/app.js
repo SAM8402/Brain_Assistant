@@ -9,7 +9,7 @@ const askBtn = document.getElementById('askBtn');
 const customRegionInput = document.getElementById('customRegion');
 const searchBtn = document.getElementById('searchBtn');
 const currentRegionSpan = document.getElementById('currentRegion');
-const useWebSearchCheckbox = document.getElementById('useWebSearch');
+// Web search checkbox removed - automatically determined by mode
 const chatbotSection = document.getElementById('chatbotSection');
 const closeChat = document.getElementById('closeChat');
 const brainSection = document.querySelector('.brain-section');
@@ -86,10 +86,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Show/hide web search option when region is selected
+    // Enable/disable ask button based on input
     questionInput.addEventListener('input', () => {
         if (currentBrainRegion && questionInput.value.trim()) {
-            document.querySelector('.web-search-toggle').style.display = 'block';
+            askBtn.disabled = false;
+        } else {
+            askBtn.disabled = true;
         }
     });
 });
@@ -137,7 +139,7 @@ async function selectBrainRegion(regionName) {
     currentBrainRegion = regionName;
     currentRegionSpan.textContent = `Current: ${regionName}`;
     askBtn.disabled = false;
-    document.querySelector('.web-search-toggle').style.display = 'none';
+    // Web search is now automatically determined by mode
     
     // Add user message
     addMessage(`Tell me about the ${regionName}`, 'user');
@@ -203,7 +205,9 @@ async function handleAskQuestion() {
     const loadingMsg = addMessage('', 'bot');
     loadingMsg.innerHTML = '<div class="loading"></div> Thinking...';
     
-    const useWeb = useWebSearchCheckbox.checked;
+    // Get selected mode to determine if web search should be used
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    const useWeb = (mode === 'web'); // Automatically use web for 'Detailed (Web)' mode
     
     isWaitingForResponse = true;
     
@@ -215,7 +219,8 @@ async function handleAskQuestion() {
             },
             body: JSON.stringify({
                 question: question,
-                use_web: useWeb
+                use_web: useWeb,
+                mode: mode
             })
         });
         

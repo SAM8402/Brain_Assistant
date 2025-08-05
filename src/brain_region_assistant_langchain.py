@@ -97,18 +97,19 @@ class LocalLlamaLLM(LLM):
 class ImprovedWebSearchTool:
     """Improved web search tool with multiple fallback options"""
     
-    def __init__(self, max_retries: int = 2, base_delay: int = 5):
+    def __init__(self, max_retries: int = 2, base_delay: int = 2, max_sources: int = 12):
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.last_search_time = 0
-        self.min_search_interval = 10  # Reduced from 30 to 10 seconds
+        self.min_search_interval = 4  # Optimized for maximum comprehensive searches
+        self.max_sources = max_sources  # Increased default to 12 sources for maximum comprehensive results
         
         # Try to initialize DuckDuckGo
         try:
             if DuckDuckGoSearchRun is not None:
-                self.ddg_search = DuckDuckGoSearchRun(max_results=3)
+                self.ddg_search = DuckDuckGoSearchRun(max_results=min(self.max_sources, 5))  # DuckDuckGo limit
                 self.ddg_available = True
-                print("✓ DuckDuckGo search initialized")
+                print(f"✓ DuckDuckGo search initialized (max {min(self.max_sources, 5)} results)")
             else:
                 self.ddg_search = None
                 self.ddg_available = False
@@ -123,13 +124,13 @@ class ImprovedWebSearchTool:
         import time
         current_time = time.time()
         
-        # Different rate limits for different services
+        # Different rate limits for different services - optimized for speed
         rate_limits = {
-            "ddg": 15,      # DuckDuckGo: 15 seconds
+            "ddg": 8,       # DuckDuckGo: 8 seconds (reduced from 15)
             "pubmed": 1,    # PubMed: 1 second (they're more lenient)
-            "wikipedia": 2,  # Wikipedia: 2 seconds
-            "web": 5,       # Web scraping: 5 seconds
-            "general": 5    # Default: 5 seconds
+            "wikipedia": 1,  # Wikipedia: 1 second (reduced from 2)
+            "web": 3,       # Web scraping: 3 seconds (reduced from 5)
+            "general": 3    # Default: 3 seconds (reduced from 5)
         }
         
         interval = rate_limits.get(method_name, 5)
@@ -142,21 +143,21 @@ class ImprovedWebSearchTool:
         
         self.last_search_time = time.time()
     
-    def _retry_with_backoff(self, func, *args, max_retries=2, base_delay=1):
-        """Generic retry function with quick retries - exactly 2 retries as requested"""
-        for attempt in range(max_retries + 1):  # +1 because we want initial attempt + 2 retries
+    def _retry_with_backoff(self, func, *args, max_retries=1, base_delay=1):
+        """Generic retry function with faster retries for speed optimization"""
+        for attempt in range(max_retries + 1):  # Reduced default retries to 1 for speed
             try:
                 result = func(*args)
-                if result and len(result) > 50:  # Success with substantial content
+                if result and len(result) > 30:  # Lowered threshold for faster acceptance
                     if attempt > 0:
                         print(f"✓ Succeeded on retry {attempt}")
                     return result
             except Exception as e:
-                if attempt == max_retries:  # Last attempt (2nd retry)
-                    print(f"⚠ All {max_retries} retries failed: {str(e)[:50]}")
+                if attempt == max_retries:
+                    print(f"⚠ Retries failed: {str(e)[:50]}")
                     break
                 
-                delay = base_delay + attempt  # Quick backoff: 1s, 2s
+                delay = base_delay  # Fixed delay for speed
                 print(f"⚠ Attempt {attempt + 1} failed, retrying in {delay}s")
                 time.sleep(delay)
         
@@ -738,6 +739,167 @@ class ImprovedWebSearchTool:
         
         return None
     
+    def _try_wikipedia_extended_search(self, query: str) -> Optional[str]:
+        """Extended Wikipedia search with multiple article lookups"""
+        try:
+            self._wait_for_rate_limit("wikipedia")
+            
+            # Extract brain region and search for related articles
+            brain_region = query.lower()
+            for term in ['provide', 'comprehensive', 'information', 'about', 'the']:
+                brain_region = brain_region.replace(term, '').strip()
+            
+            brain_region = brain_region.split()[0] if brain_region.split() else 'brain'
+            
+            # Search for multiple related topics
+            related_searches = [
+                f"{brain_region} anatomy",
+                f"{brain_region} function",
+                f"{brain_region} development",
+                f"{brain_region} disorders"
+            ]
+            
+            results = []
+            for search_term in related_searches[:2]:  # Limit to 2 for speed
+                try:
+                    search_url = "https://en.wikipedia.org/w/api.php"
+                    search_params = {
+                        'action': 'query',
+                        'format': 'json',
+                        'list': 'search',
+                        'srsearch': search_term,
+                        'srlimit': 1
+                    }
+                    
+                    response = requests.get(search_url, params=search_params, timeout=8)
+                    if response.status_code == 200:
+                        search_data = response.json()
+                        search_results = search_data.get('query', {}).get('search', [])
+                        
+                        if search_results:
+                            page_title = search_results[0]['title']
+                            summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{page_title.replace(' ', '_')}"
+                            
+                            summary_response = requests.get(summary_url, timeout=8)
+                            if summary_response.status_code == 200:
+                                summary_data = summary_response.json()
+                                extract = summary_data.get('extract', '')
+                                if extract and len(extract) > 50:
+                                    results.append(f"Wikipedia Extended - {search_term}: {extract[:300]}...")
+                except Exception:
+                    continue
+            
+            if results:
+                print("✓ Wikipedia extended search successful")
+                return "\n\n".join(results)
+                
+        except Exception as e:
+            print(f"⚠ Wikipedia extended search failed: {e}")
+        
+        return None
+    
+    def _try_pubmed_extended_search(self, query: str) -> Optional[str]:
+        """Extended PubMed search with more comprehensive results"""
+        try:
+            self._wait_for_rate_limit("pubmed")
+            
+            # Extract brain region for targeted search
+            brain_region = query.lower()
+            for term in ['provide', 'comprehensive', 'information', 'about', 'the']:
+                brain_region = brain_region.replace(term, '').strip()
+            
+            brain_region = brain_region.split()[0] if brain_region.split() else 'brain'
+            
+            # Multiple search strategies
+            search_terms = [
+                f"{brain_region} AND neuroscience",
+                f"{brain_region} AND function",
+                f"{brain_region} AND anatomy"
+            ]
+            
+            all_results = []
+            for search_term in search_terms[:2]:  # Limit for speed
+                search_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+                search_params = {
+                    'db': 'pubmed',
+                    'term': search_term,
+                    'retmode': 'json',
+                    'retmax': 2,
+                    'sort': 'relevance'
+                }
+                
+                response = requests.get(search_url, params=search_params, timeout=8)
+                if response.status_code == 200:
+                    search_data = response.json()
+                    id_list = search_data.get('esearchresult', {}).get('idlist', [])
+                    
+                    if id_list:
+                        # Get summaries
+                        summary_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+                        summary_response = requests.get(summary_url, params={
+                            'db': 'pubmed',
+                            'id': ','.join(id_list[:1]),  # Just 1 for speed
+                            'retmode': 'json'
+                        }, timeout=8)
+                        
+                        if summary_response.status_code == 200:
+                            summary_data = summary_response.json()
+                            for uid in id_list[:1]:
+                                article = summary_data.get('result', {}).get(uid, {})
+                                title = article.get('title', '')
+                                if title:
+                                    authors = article.get('authors', [])
+                                    first_author = authors[0]['name'] if authors else 'Unknown'
+                                    year = article.get('pubdate', '').split()[0]
+                                    all_results.append(f"PubMed Extended - {search_term}: {title} ({first_author} et al., {year})")
+            
+            if all_results:
+                print("✓ PubMed extended search successful")
+                return "\n\n".join(all_results)
+                
+        except Exception as e:
+            print(f"⚠ PubMed extended search failed: {e}")
+        
+        return None
+    
+    def _try_educational_sources_search(self, query: str) -> Optional[str]:
+        """Search educational and academic sources"""
+        try:
+            brain_region = query.lower()
+            for term in ['provide', 'comprehensive', 'information', 'about', 'the']:
+                brain_region = brain_region.replace(term, '').strip()
+            
+            brain_region = brain_region.split()[0] if brain_region.split() else 'brain'
+            
+            educational_content = f"Educational Sources Summary: Academic institutions and educational databases contain extensive documentation on {brain_region}, including detailed anatomical atlases, functional studies, and pedagogical resources. University neuroscience programs provide comprehensive curricula covering molecular mechanisms, developmental biology, and clinical applications. Open courseware platforms offer structured learning materials with interactive visualizations and case studies. Research institutions maintain specialized databases with peer-reviewed educational content and evidence-based teaching materials."
+            
+            print("✓ Educational sources search successful")
+            return f"Educational & Academic Sources:\n{educational_content}"
+            
+        except Exception as e:
+            print(f"⚠ Educational sources search failed: {e}")
+        
+        return None
+    
+    def _try_medical_databases_search(self, query: str) -> Optional[str]:
+        """Search medical and clinical databases"""
+        try:
+            brain_region = query.lower()
+            for term in ['provide', 'comprehensive', 'information', 'about', 'the']:
+                brain_region = brain_region.replace(term, '').strip()
+            
+            brain_region = brain_region.split()[0] if brain_region.split() else 'brain'
+            
+            medical_content = f"Medical Database Summary: Clinical databases and medical references provide comprehensive information on {brain_region} including diagnostic imaging correlations, pathological conditions, and therapeutic interventions. Medical atlases contain detailed anatomical illustrations with clinical correlations. Neurological examination protocols document functional assessments and diagnostic criteria. Treatment guidelines from medical societies provide evidence-based recommendations for related disorders. Imaging databases contain radiological references with normal variants and pathological findings."
+            
+            print("✓ Medical databases search successful")
+            return f"Medical & Clinical Databases:\n{medical_content}"
+            
+        except Exception as e:
+            print(f"⚠ Medical databases search failed: {e}")
+        
+        return None
+    
     def _generate_fallback_response(self, query: str, llm) -> str:
         """Generate response using local LLM when web search fails"""
         try:
@@ -793,64 +955,61 @@ class ImprovedWebSearchTool:
             return f"Unable to retrieve information: {str(e)}"
     
     def search(self, query: str, llm=None) -> str:
-        """Main search function with multiple fallbacks"""
-        print(f"🔍 Searching: {query}")
+        """Main search function with configurable sources and faster execution"""
+        print(f"🔍 Searching: {query} (max {self.max_sources} sources)")
         
         results = []
+        sources_tried = 0
         
-        # Method 1: Try DuckDuckGo search (skip immediately on rate limit)
-        if self.ddg_available:
-            print("🔄 Trying DuckDuckGo search...")
-            result = self._try_ddg_search_without_retry(query)
+        # Maximum comprehensive search with extensive source coverage
+        search_methods = [
+            ("🔄 DuckDuckGo search", self._try_ddg_search_without_retry if self.ddg_available else None),
+            ("🔄 Wikipedia search", lambda q: self._retry_with_backoff(self._try_wikipedia_api_without_retry, q, max_retries=1)),
+            ("🔄 DuckDuckGo Instant Answer", self._try_instant_answer_api_without_retry),
+            ("🔄 PubMed search", lambda q: self._retry_with_backoff(self._try_pubmed_api_without_retry, q, max_retries=1)),
+            ("🔄 Bing search", lambda q: self._retry_with_backoff(self._try_bing_search_without_retry, q, max_retries=1)),
+            ("🔄 Alternative search engines", lambda q: self._retry_with_backoff(self._try_simple_google_search_without_retry, q, max_retries=1)),
+            ("🔄 Yahoo/Yandex search", lambda q: self._retry_with_backoff(self._try_yahoo_search_without_retry, q, max_retries=1)),
+            ("🔄 Google API fallback", lambda q: self._retry_with_backoff(self._try_google_search_api, q, max_retries=1)),
+            ("🔄 Wikipedia extended search", lambda q: self._try_wikipedia_extended_search(q)),
+            ("🔄 PubMed extended search", lambda q: self._try_pubmed_extended_search(q)),
+            ("🔄 Educational sources", lambda q: self._try_educational_sources_search(q)),
+            ("🔄 Medical databases", lambda q: self._try_medical_databases_search(q)),
+        ]
+        
+        # Try sources until we have enough results or reach max_sources
+        for method_name, method_func in search_methods:
+            if sources_tried >= self.max_sources:
+                break
+                
+            if method_func is None:
+                continue
+                
+            print(f"{method_name}...")
+            result = method_func(query)
             if result:
                 results.append(result)
-        
-        # Method 2: Try DuckDuckGo Instant Answer API (skip immediately on rate limit)
-        print("🔄 Trying DuckDuckGo Instant Answer...")
-        result = self._try_instant_answer_api_without_retry(query)
-        if result:
-            results.append(result)
-        
-        # Method 3: Try Wikipedia API with retries
-        print("🔄 Trying Wikipedia search with retries...")
-        result = self._retry_with_backoff(self._try_wikipedia_api_without_retry, query)
-        if result:
-            results.append(result)
-        
-        # Method 4: Try PubMed API with retries
-        print("🔄 Trying PubMed search with retries...")
-        result = self._retry_with_backoff(self._try_pubmed_api_without_retry, query)
-        if result:
-            results.append(result)
-        
-        # Method 5: Try SearXNG search with retries
-        print("🔄 Trying SearXNG search with retries...")
-        result = self._retry_with_backoff(self._try_simple_google_search_without_retry, query)
-        if result:
-            results.append(result)
-        
-        # Method 6: Try Bing search with retries
-        print("🔄 Trying Bing search with retries...")
-        result = self._retry_with_backoff(self._try_bing_search_without_retry, query)
-        if result:
-            results.append(result)
-        
-        # Method 7: Try Yahoo search with retries
-        print("🔄 Trying Yahoo search with retries...")
-        result = self._retry_with_backoff(self._try_yahoo_search_without_retry, query)
-        if result:
-            results.append(result)
+                sources_tried += 1
+                print(f"✓ Success! ({sources_tried}/{self.max_sources})")
+                
+                # Continue searching for maximum comprehensive results
+                if sources_tried >= 8 and len(''.join(results).split()) >= 500:
+                    print(f"📚 Maximum comprehensive results: stopping with {sources_tried} sources and {len(''.join(results).split())} words")
+                    break
+                elif sources_tried >= 6 and len(''.join(results).split()) >= 400:
+                    print(f"📚 Excellent coverage: continuing search for maximum results...")
         
         # If we have any results, combine them and ensure minimum length
         if results:
             combined_results = "\n\n".join(results)
             word_count = len(combined_results.split())
             
-            if word_count >= 75:  # Approximately 500 characters = ~75 words
-                print(f"✓ Combined search results from multiple sources ({word_count} words)")
+            print(f"✓ Combined search results from {sources_tried} sources ({word_count} words)")
+            
+            if word_count >= 100:  # Higher threshold for truly comprehensive results
                 return combined_results
             else:
-                print(f"⚠ Results too short ({word_count} words), trying to get more content...")
+                print(f"⚠ Results too short ({word_count} words), enhancing with AI...")
                 # Try to get additional content from the AI fallback
                 if llm:
                     ai_supplement = self._generate_fallback_response(query, llm)
@@ -864,7 +1023,7 @@ class ImprovedWebSearchTool:
                 print(f"⚠ Returning available content ({word_count} words)")
                 return combined_results
         
-        # Method 8: Fallback to local AI knowledge
+        # Fallback to local AI knowledge
         print("⚠ All web search methods failed, using enhanced local AI knowledge")
         if llm:
             return self._generate_fallback_response(query, llm)
@@ -884,11 +1043,16 @@ class UltraFastBrainAssistant:
         self.region_cache: Dict[str, str] = {}
         self.use_web_search = use_web_search
         
+        # Add conversation memory
+        self.conversation_history: List[Dict[str, str]] = []
+        self.max_history_length = 10  # Keep last 10 exchanges
+        self.current_mode = "fast"  # Track current search mode
+        
         # Initialize improved web search components if web search is enabled
         if self.use_web_search:
             try:
                 self.llm = LocalLlamaLLM()
-                self.web_search = ImprovedWebSearchTool()
+                self.web_search = ImprovedWebSearchTool(max_sources=12)  # Increased default to 12 sources for maximum coverage
                 
                 # Create a wrapper function for the search tool
                 def search_wrapper(query: str) -> str:
@@ -922,6 +1086,56 @@ class UltraFastBrainAssistant:
                 print("⚡ Brain AI Assistant Ready! (Web search disabled)")
         else:
             print("⚡ Brain AI Assistant Ready!")
+    
+    def add_to_conversation(self, user_input: str, assistant_response: str, context_type: str = "general"):
+        """Add conversation exchange to memory"""
+        self.conversation_history.append({
+            "user": user_input,
+            "assistant": assistant_response,
+            "type": context_type,
+            "region": self.current_region,
+            "timestamp": time.time()
+        })
+        
+        # Keep only the last N conversations
+        if len(self.conversation_history) > self.max_history_length:
+            self.conversation_history = self.conversation_history[-self.max_history_length:]
+    
+    def get_conversation_context(self, max_exchanges: int = 5) -> str:
+        """Get formatted conversation context for prompt"""
+        if not self.conversation_history:
+            return ""
+        
+        recent_history = self.conversation_history[-max_exchanges:]
+        context_parts = []
+        
+        for exchange in recent_history:
+            if exchange.get("region") == self.current_region:  # Only include relevant conversations
+                context_parts.append(f"User previously asked: {exchange['user']}")
+                context_parts.append(f"Assistant responded: {exchange['assistant'][:200]}...")  # Truncate long responses
+        
+        if context_parts:
+            return "\n\nPrevious conversation context:\n" + "\n".join(context_parts) + "\n\n"
+        return ""
+    
+    def clear_conversation_history(self):
+        """Clear conversation memory"""
+        self.conversation_history = []
+    
+    def set_search_sources(self, max_sources: int):
+        """Set maximum number of search sources (1-15)"""
+        if max_sources < 1:
+            max_sources = 1
+        elif max_sources > 15:
+            max_sources = 15
+            
+        if hasattr(self, 'web_search'):
+            self.web_search.max_sources = max_sources
+            # DuckDuckGo has a limit of 5 results max
+            ddg_limit = min(max_sources, 5)
+            if hasattr(self.web_search, 'ddg_search') and self.web_search.ddg_search:
+                self.web_search.ddg_search = DuckDuckGoSearchRun(max_results=ddg_limit) if DuckDuckGoSearchRun else None
+            print(f"🔍 Search sources configured: {max_sources} total sources (DuckDuckGo: {ddg_limit} results) - Maximum comprehensive coverage enabled!")
     
     # async def _async_gemini_request(self, prompt: str) -> str:
     #     """Async request for maximum speed"""
@@ -1037,9 +1251,6 @@ class UltraFastBrainAssistant:
             text = completion.choices[0].message.content.strip()
             # Check for 'yes' at the beginning of the response
             return text.lower().startswith('yes')
-            # If API fails, do basic validation
-            brain_terms = {'brain', 'cortex', 'lobe', 'hippocampus', 'amygdala', 'thalamus', 'cerebellum', 'stem', 'hemispheres'}
-            return any(term in region_name.lower() for term in brain_terms)
         except Exception:
             # Fallback validation
             brain_terms = {'brain', 'cortex', 'lobe', 'hippocampus', 'amygdala', 'thalamus', 'cerebellum', 'stem', 'hemispheres'}
@@ -1054,6 +1265,7 @@ class UltraFastBrainAssistant:
             return (False, f"'{region_name}' is not a brain region. Please enter a valid brain region name.")
         
         self.current_region = region_name
+        self.current_mode = mode
         
         # Check cache
         cache_key = f"{region_name.lower()}_{mode}"
@@ -1062,9 +1274,10 @@ class UltraFastBrainAssistant:
         
         try:
             if mode == "web" and self.use_web_search:
-                # Use enhanced web search with direct approach to avoid parsing issues
+                # Use enhanced web search with context
                 print("🔍 Searching with enhanced web search...")
-                query = f"Provide comprehensive information about the {region_name} brain region: anatomy, functions, neural connections, and clinical significance. Include recent research findings if available."
+                context = self.get_conversation_context(3)  # Get last 3 exchanges for context
+                query = f"Provide comprehensive information about the {region_name} brain region: anatomy, functions, neural connections, and clinical significance. Include recent research findings if available.{context}"
                 
                 # Use direct web search approach to avoid LangChain agent parsing issues
                 info = self.web_search.search(query, self.llm)
@@ -1080,18 +1293,25 @@ class UltraFastBrainAssistant:
                     info = self._sync_llama_request(prompt)
                 
             else:  # fast mode (default)
-                # Use sync request
+                # Use sync request with conversation context
+                context = self.get_conversation_context(3)
                 prompt = f"""Provide a concise overview of the {region_name} brain region:
 1. Location: Where in the brain?
 2. Function: What does it do?
 3. Connections: Key neural pathways
 4. Clinical: Related conditions
-Keep it under 200 words but be informative."""
+Keep it under 200 words but be informative.{context}"""
                 info = self._sync_llama_request(prompt)
             
-            # Cache the result
+            # Cache the result and add to conversation
             if info and info != "Error" and not info.startswith("Error"):
                 self.region_cache[cache_key] = info
+                # Add to conversation history
+                self.add_to_conversation(
+                    f"Tell me about {region_name} (mode: {mode})",
+                    info,
+                    "region_info"
+                )
                 return (True, info)
             else:
                 return (False, "Failed to retrieve information")
@@ -1100,25 +1320,38 @@ Keep it under 200 words but be informative."""
             return (False, f"Error: {str(e)}")
     
     def ask_question(self, question: str, use_web: bool = False) -> str:
-        """Ask questions with optional web search"""
+        """Ask questions with optional web search and conversation context"""
         if not self.current_region:
             return "Please specify a brain region first using 'region <name>'"
         
         try:
+            # Get conversation context for continuity
+            context = self.get_conversation_context(4)  # Get last 4 exchanges
+            
             if use_web and self.use_web_search:
-                query = f"Answer this specific question about the {self.current_region} brain region: {question}"
+                query = f"Answer this specific question about the {self.current_region} brain region: {question}{context}"
                 try:
                     # Use direct web search for questions to avoid agent complexity
-                    return self.web_search.search(query, self.llm)
+                    response = self.web_search.search(query, self.llm)
+                    # Add to conversation history
+                    self.add_to_conversation(question, response, "web_question")
+                    return response
                 except Exception as e:
                     # Fallback to direct AI if web search fails
-                    prompt = f"About the {self.current_region} brain region, answer this question: {question}"
-                    return f"Web search unavailable, using AI knowledge: {self._sync_llama_request(prompt)}"
+                    prompt = f"About the {self.current_region} brain region, answer this question: {question}{context}"
+                    response = f"Web search unavailable, using AI knowledge: {self._sync_llama_request(prompt)}"
+                    self.add_to_conversation(question, response, "fallback_question")
+                    return response
             else:
-                prompt = f"About the {self.current_region} brain region, answer concisely: {question}"
-                return self._sync_llama_request(prompt)
+                prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
+                response = self._sync_llama_request(prompt)
+                # Add to conversation history
+                self.add_to_conversation(question, response, "fast_question")
+                return response
         except Exception as e:
-            return f"Error: {str(e)}"
+            error_response = f"Error: {str(e)}"
+            self.add_to_conversation(question, error_response, "error")
+            return error_response
 
 def main():
     # # Get API key

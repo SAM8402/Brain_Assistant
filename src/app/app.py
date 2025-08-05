@@ -11,6 +11,30 @@ app.secret_key = 'brain_assistant_secret_key_change_in_production'  # Change thi
 # Initialize the brain assistant
 assistant = UltraFastBrainAssistant(use_web_search=True)
 
+# Helper function to sync Flask session with assistant's conversation history
+def sync_assistant_history():
+    """Sync Flask session history with the assistant's internal history"""
+    chat_history = get_chat_history()
+    
+    # Clear and rebuild assistant's conversation history from session
+    assistant.clear_conversation_history()
+    
+    # Add conversations to assistant's memory
+    for msg in chat_history:
+        if msg['type'] == 'user_query':
+            # Find the corresponding assistant response
+            next_msg = None
+            idx = chat_history.index(msg)
+            if idx + 1 < len(chat_history):
+                next_msg = chat_history[idx + 1]
+            
+            if next_msg and next_msg['type'] in ['assistant_response', 'region_info']:
+                assistant.add_to_conversation(
+                    msg['content'],
+                    next_msg['content'],
+                    msg['type']
+                )
+
 def get_chat_history():
     """Get chat history from session"""
     if 'chat_history' not in session:
@@ -35,6 +59,8 @@ def clear_chat_history():
     session['chat_history'] = []
     session.pop('current_mode', None)  # Also clear stored mode
     session.modified = True
+    # Also clear assistant's conversation history
+    assistant.clear_conversation_history()
 
 @app.route('/')
 def index():
@@ -56,6 +82,9 @@ def process_brain_region():
                 'success': False,
                 'message': 'Please provide a brain region name'
             }), 400
+        
+        # Sync conversation history before processing
+        sync_assistant_history()
         
         # Add user query to chat history
         add_to_chat_history('user_query', f"Tell me about {region_name} (mode: {mode})", region_name)
@@ -119,6 +148,9 @@ def ask_question():
                 'success': False,
                 'message': 'Please select a brain region first'
             }), 400
+        
+        # Sync conversation history before processing
+        sync_assistant_history()
         
         # Automatically enable web search if mode is 'web' (Detailed mode)
         if mode == 'web':
@@ -233,6 +265,67 @@ def get_user_questions():
             'questions': user_questions,
             'total_questions': len(user_questions)
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/search-config', methods=['POST'])
+def configure_search():
+    """Configure search parameters"""
+    try:
+        data = request.json
+        max_sources = data.get('max_sources', 3)
+        
+        if max_sources < 1 or max_sources > 15:
+            return jsonify({
+                'success': False,
+                'message': 'max_sources must be between 1 and 15 (default: 12)'
+            }), 400
+        
+        # Update search configuration
+        assistant.set_search_sources(max_sources)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Search configured to use maximum {max_sources} sources',
+            'max_sources': max_sources
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/search-config', methods=['GET'])
+def get_search_config():
+    """Get current search configuration"""
+    try:
+        max_sources = getattr(assistant.web_search, 'max_sources', 12) if hasattr(assistant, 'web_search') else 12
+        
+        return jsonify({
+            'success': True,
+            'max_sources': max_sources,
+            'default_sources': 12,
+            'maximum_sources': 15,
+            'available_sources': [
+                'DuckDuckGo Search (Primary)',
+                'Wikipedia API (Comprehensive)', 
+                'DuckDuckGo Instant Answer',
+                'PubMed Scientific Database',
+                'Bing Search Engine',
+                'Alternative Search Engines (Startpage, Ecosia)',
+                'Yahoo/Yandex Search',
+                'Google API Fallback',
+                'Wikipedia Extended Search',
+                'PubMed Extended Search',
+                'Educational Sources (Universities)',
+                'Medical & Clinical Databases'
+            ]
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False,
