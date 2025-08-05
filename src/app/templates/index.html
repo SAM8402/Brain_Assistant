@@ -177,7 +177,11 @@
                     <div class="chat-header">
                         <h2>Brain AI Assistant</h2>
                         <span id="currentRegion"></span>
-                        <button class="close-chat" id="closeChat">×</button>
+                        <div class="chat-controls">
+                            <button class="history-btn" id="historyBtn" title="View Chat History">📜</button>
+                            <button class="clear-btn" id="clearBtn" title="Clear Chat History">🗑️</button>
+                            <button class="close-chat" id="closeChat">×</button>
+                        </div>
                     </div>
                     
                     <div class="chat-messages" id="chatMessages">
@@ -209,6 +213,28 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat History Modal -->
+    <div class="modal" id="historyModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Chat History</h3>
+                <span class="close-modal" id="closeHistoryModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="history-stats">
+                    <span id="historyStats">Loading...</span>
+                </div>
+                <div class="history-list" id="historyList">
+                    <!-- History items will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="downloadHistory">Download History</button>
+                <button class="btn-primary" id="closeHistoryBtn">Close</button>
             </div>
         </div>
     </div>

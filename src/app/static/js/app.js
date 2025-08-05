@@ -13,6 +13,14 @@ const useWebSearchCheckbox = document.getElementById('useWebSearch');
 const chatbotSection = document.getElementById('chatbotSection');
 const closeChat = document.getElementById('closeChat');
 const brainSection = document.querySelector('.brain-section');
+const historyBtn = document.getElementById('historyBtn');
+const clearBtn = document.getElementById('clearBtn');
+const historyModal = document.getElementById('historyModal');
+const closeHistoryModal = document.getElementById('closeHistoryModal');
+const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+const historyList = document.getElementById('historyList');
+const historyStats = document.getElementById('historyStats');
+const downloadHistory = document.getElementById('downloadHistory');
 
 // Initialize event listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -45,6 +53,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // Close chat button
     closeChat.addEventListener('click', () => {
         closeChatbot();
+    });
+
+    // History button
+    historyBtn.addEventListener('click', () => {
+        showChatHistory();
+    });
+
+    // Clear history button
+    clearBtn.addEventListener('click', () => {
+        clearChatHistory();
+    });
+
+    // History modal close handlers
+    closeHistoryModal.addEventListener('click', () => {
+        historyModal.style.display = 'none';
+    });
+    
+    closeHistoryBtn.addEventListener('click', () => {
+        historyModal.style.display = 'none';
+    });
+
+    // Download history button
+    downloadHistory.addEventListener('click', () => {
+        downloadChatHistory();
+    });
+
+    // Close modal when clicking outside
+    historyModal.addEventListener('click', (e) => {
+        if (e.target === historyModal) {
+            historyModal.style.display = 'none';
+        }
     });
 
     // Show/hide web search option when region is selected
@@ -227,4 +266,168 @@ function highlightRegion(regionName) {
             region.classList.add('selected');
         }
     });
+}
+
+// Chat History Functions
+async function showChatHistory() {
+    try {
+        const response = await fetch('/api/chat-history');
+        const data = await response.json();
+        
+        if (data.success) {
+            displayChatHistory(data.chat_history, data.current_region, data.current_mode);
+            historyModal.style.display = 'block';
+        } else {
+            alert('Error loading chat history: ' + data.message);
+        }
+    } catch (error) {
+        alert('Error loading chat history: ' + error.message);
+    }
+}
+
+function displayChatHistory(history, currentRegion, currentMode) {
+    // Update stats
+    const totalMessages = history.length;
+    const userQuestions = history.filter(msg => msg.type === 'user_query').length;
+    const regions = [...new Set(history.filter(msg => msg.region).map(msg => msg.region))];
+    
+    historyStats.innerHTML = `
+        <strong>Chat Statistics:</strong> 
+        ${totalMessages} total messages, 
+        ${userQuestions} questions asked, 
+        ${regions.length} regions explored
+        ${currentRegion ? `<br><strong>Current:</strong> ${currentRegion} (${currentMode || 'fast'} mode)` : ''}
+    `;
+    
+    // Clear previous history
+    historyList.innerHTML = '';
+    
+    if (history.length === 0) {
+        historyList.innerHTML = '<div class="no-history">No chat history yet. Start exploring brain regions!</div>';
+        return;
+    }
+    
+    // Group messages by region for better organization
+    const groupedHistory = {};
+    history.forEach((msg, index) => {
+        const region = msg.region || 'General';
+        if (!groupedHistory[region]) {
+            groupedHistory[region] = [];
+        }
+        groupedHistory[region].push({...msg, index});
+    });
+    
+    // Display grouped history
+    Object.keys(groupedHistory).forEach(region => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'history-region-group';
+        
+        const regionHeader = document.createElement('h4');
+        regionHeader.className = 'history-region-header';
+        regionHeader.textContent = region;
+        regionDiv.appendChild(regionHeader);
+        
+        groupedHistory[region].forEach(msg => {
+            const historyItem = document.createElement('div');
+            historyItem.className = `history-item ${msg.type}`;
+            
+            const timestamp = new Date(msg.timestamp).toLocaleString();
+            const typeLabel = {
+                'user_query': '❓ Question',
+                'region_info': '🧠 Region Info', 
+                'assistant_response': '🤖 Answer'
+            }[msg.type] || '💬 Message';
+            
+            historyItem.innerHTML = `
+                <div class="history-item-header">
+                    <span class="history-type">${typeLabel}</span>
+                    <span class="history-timestamp">${timestamp}</span>
+                </div>
+                <div class="history-content">${msg.content}</div>
+            `;
+            
+            regionDiv.appendChild(historyItem);
+        });
+        
+        historyList.appendChild(regionDiv);
+    });
+}
+
+async function clearChatHistory() {
+    if (!confirm('Are you sure you want to clear all chat history? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/chat-history', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Chat history cleared successfully!');
+            // Close chatbot and reset state
+            closeChatbot();
+            // Close history modal if open
+            historyModal.style.display = 'none';
+        } else {
+            alert('Error clearing chat history: ' + data.message);
+        }
+    } catch (error) {
+        alert('Error clearing chat history: ' + error.message);
+    }
+}
+
+async function downloadChatHistory() {
+    try {
+        const response = await fetch('/api/chat-history');
+        const data = await response.json();
+        
+        if (data.success) {
+            const historyText = formatHistoryForDownload(data.chat_history);
+            const blob = new Blob([historyText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `brain-assistant-history-${new Date().toISOString().split('T')[0]}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } else {
+            alert('Error downloading chat history: ' + data.message);
+        }
+    } catch (error) {
+        alert('Error downloading chat history: ' + error.message);
+    }
+}
+
+function formatHistoryForDownload(history) {
+    let text = 'Brain Assistant Chat History\n';
+    text += '================================\n';
+    text += `Generated on: ${new Date().toLocaleString()}\n\n`;
+    
+    let currentRegion = '';
+    
+    history.forEach((msg, index) => {
+        const timestamp = new Date(msg.timestamp).toLocaleString();
+        
+        // Add region header when it changes
+        if (msg.region && msg.region !== currentRegion) {
+            currentRegion = msg.region;
+            text += `\n--- ${currentRegion.toUpperCase()} ---\n`;
+        }
+        
+        const typeLabel = {
+            'user_query': 'USER',
+            'region_info': 'ASSISTANT (Region Info)',
+            'assistant_response': 'ASSISTANT'
+        }[msg.type] || 'MESSAGE';
+        
+        text += `[${timestamp}] ${typeLabel}:\n${msg.content}\n\n`;
+    });
+    
+    return text;
 }
