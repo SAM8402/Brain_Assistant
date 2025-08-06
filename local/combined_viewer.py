@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template_string, session
+from flask_cors import CORS
 import requests
 import pickle
 import sys
@@ -18,6 +19,9 @@ from src.brain_region_assistant_langchain import UltraFastBrainAssistant
 
 app = Flask(__name__)
 app.secret_key = 'combined_brain_viewer_secret_key_change_in_production'  # Change this in production
+
+# Enable CORS for all domains and all routes
+CORS(app)
 
 # Database Configuration
 MySQL_db_user = "root"

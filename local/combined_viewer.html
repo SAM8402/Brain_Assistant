@@ -488,76 +488,6 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        .nav-buttons {
-            padding: 12px 16px;
-            font-size: 18px;
-            cursor: pointer;
-            border: none;
-            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-            color: white;
-            border-radius: 50%;
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 10;
-            width: 48px;
-            height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-
-        .nav-buttons:hover:not(:disabled) {
-            background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
-            transform: translateY(-50%) scale(1.1);
-            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
-        }
-
-        .nav-buttons:active:not(:disabled) {
-            transform: translateY(-50%) scale(0.95);
-        }
-
-        #prev {
-            left: 10px;
-        }
-
-        #next {
-            right: 10px;
-        }
-
-        .nav-buttons:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-            background: #9ca3af;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            pointer-events: none;
-            transform: translateY(-50%) scale(0.9);
-        }
-
-        /* Ensure buttons are always visible on hover */
-        .container:hover .nav-buttons {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        /* Add responsive button positioning */
-        @media (max-width: 768px) {
-            .nav-buttons {
-                width: 40px;
-                height: 40px;
-                font-size: 14px;
-            }
-            
-            #prev {
-                left: 5px;
-            }
-            
-            #next {
-                right: 5px;
-            }
-        }
 
         .selected {
             border: 3px solid #2563eb !important;
@@ -1110,14 +1040,12 @@
                 </div>
                 <div class="thumbnail-content">
                     <div class="container">
-                        <button id="prev" class="nav-buttons" disabled>&#11164;</button>
                         <div class="image-grid-container">
                             <div class="image-grid-wrapper">
                                 <div id="image-grid-1" class="image-grid"></div>
                                 <div id="image-grid-2" class="image-grid"></div>
                             </div>
                         </div>
-                        <button id="next" class="nav-buttons">&#11166;</button>
                     </div>
                 </div>
             </div>
@@ -1726,8 +1654,6 @@
         const gridWrapper = document.querySelector(".image-grid-wrapper");
         const grid1 = document.getElementById("image-grid-1");
         const grid2 = document.getElementById("image-grid-2");
-        const prevButton = document.getElementById("prev");
-        const nextButton = document.getElementById("next");
 
         async function fetchImages() {
             try {
@@ -1769,7 +1695,6 @@
                 }
 
                 renderImages(grid1, startIndex);
-                updatePaginationButtons();
             } catch (error) {
                 console.error("Error fetching images:", error);
             }
@@ -1976,52 +1901,12 @@
 
                 startIndex = nextIndex;
                 isAnimating = false;
-                updatePaginationButtons();
             }, 300);
         }
 
-        function updatePaginationButtons() {
-            if (!imagesData.length) {
-                prevButton.disabled = true;
-                nextButton.disabled = true;
-                prevButton.style.display = 'none';
-                nextButton.style.display = 'none';
-                return;
-            }
+        // Navigation buttons removed - using scroll wheel and keyboard only
 
-            const columns = calculateColumns();
-            const rows = calculateRows();
-            const imagesPerPage = columns * rows;
-
-            const canGoPrev = startIndex > 0;
-            const canGoNext = startIndex + imagesPerPage < imagesData.length;
-
-            prevButton.disabled = !canGoPrev;
-            nextButton.disabled = !canGoNext;
-            
-            // Show/hide buttons based on availability
-            prevButton.style.display = canGoPrev ? 'flex' : 'none';
-            nextButton.style.display = canGoNext ? 'flex' : 'none';
-            
-            // Update button opacity for better visual feedback
-            prevButton.style.opacity = canGoPrev ? '1' : '0.3';
-            nextButton.style.opacity = canGoNext ? '1' : '0.3';
-        }
-
-        // Enhanced navigation button event listeners
-        prevButton.addEventListener("click", (e) => {
-            e.stopPropagation();
-            if (!prevButton.disabled) {
-                scrollImages("prev");
-            }
-        });
-        
-        nextButton.addEventListener("click", (e) => {
-            e.stopPropagation();
-            if (!nextButton.disabled) {
-                scrollImages("next");
-            }
-        });
+        // Navigation button event listeners removed
         
         window.addEventListener("resize", () => {
             const columns = calculateColumns();
@@ -2038,7 +1923,6 @@
             }
 
             renderImages(grid1, startIndex);
-            updatePaginationButtons();
             
             if (window.map) {
                 window.map.updateSize();
@@ -2053,15 +1937,23 @@
 
         // Add scroll wheel support for navigation
         document.querySelector('.image-grid-container').addEventListener('wheel', function(e) {
+            if (isAnimating) return;
+            
+            const columns = calculateColumns();
+            const rows = calculateRows();
+            const imagesPerPage = columns * rows;
+            const canGoNext = startIndex + imagesPerPage < imagesData.length;
+            const canGoPrev = startIndex > 0;
+            
             if (e.deltaY > 0) {
                 // Scroll down - next page
-                if (!nextButton.disabled) {
+                if (canGoNext) {
                     e.preventDefault();
                     scrollImages('next');
                 }
             } else {
                 // Scroll up - previous page
-                if (!prevButton.disabled) {
+                if (canGoPrev) {
                     e.preventDefault();
                     scrollImages('prev');
                 }
@@ -2076,11 +1968,17 @@
                                  focusedElement.tagName === 'TEXTAREA' || 
                                  focusedElement.contentEditable === 'true';
             
-            if (!isInputFocused) {
-                if (e.key === 'ArrowLeft' && !prevButton.disabled) {
+            if (!isInputFocused && !isAnimating) {
+                const columns = calculateColumns();
+                const rows = calculateRows();
+                const imagesPerPage = columns * rows;
+                const canGoNext = startIndex + imagesPerPage < imagesData.length;
+                const canGoPrev = startIndex > 0;
+                
+                if (e.key === 'ArrowLeft' && canGoPrev) {
                     e.preventDefault();
                     scrollImages('prev');
-                } else if (e.key === 'ArrowRight' && !nextButton.disabled) {
+                } else if (e.key === 'ArrowRight' && canGoNext) {
                     e.preventDefault();
                     scrollImages('next');
                 }
