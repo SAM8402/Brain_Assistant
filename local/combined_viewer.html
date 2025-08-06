@@ -21,7 +21,8 @@
             height: 100%;
             width: 100%;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /*background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            */
             min-height: 100vh;
         }
 
@@ -461,6 +462,435 @@
             border-color: #6366f1;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
+
+        /* Chatbot styles */
+        .chatbot-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            height: 500px;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: none;
+            flex-direction: column;
+            z-index: 2000;
+            transition: all 0.3s ease;
+        }
+
+        .chatbot-container.active {
+            display: flex;
+        }
+
+        .chatbot-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chatbot-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .chatbot-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .chatbot-close:hover {
+            transform: scale(1.1);
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f9fafb;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            text-align: right;
+        }
+
+        .user-message p {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px 12px 4px 12px;
+            display: inline-block;
+            max-width: 80%;
+            margin: 0;
+        }
+
+        .bot-message {
+            text-align: left;
+        }
+
+        .bot-message p {
+            background: #ffffff;
+            color: #374151;
+            padding: 12px 16px;
+            border-radius: 12px 12px 12px 4px;
+            display: inline-block;
+            max-width: 80%;
+            margin: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .chatbot-input-container {
+            padding: 20px;
+            background: #ffffff;
+            border-top: 1px solid #e5e7eb;
+            border-radius: 0 0 16px 16px;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .mode-selector label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .mode-selector input[type="radio"] {
+            cursor: pointer;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .chat-input input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .chat-input button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chat-input button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .chat-input button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .chatbot-toggle {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1999;
+        }
+
+        .chatbot-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .chatbot-toggle svg {
+            width: 30px;
+            height: 30px;
+            color: white;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* History controls */
+        .history-controls {
+            position: absolute;
+            top: 20px;
+            right: 60px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .history-btn, .clear-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .history-btn:hover, .clear-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+
+        .current-region {
+            color: #6366f1;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            z-index: 3000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: modalAppear 0.3s ease-out;
+        }
+
+        @keyframes modalAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .close-modal {
+            font-size: 28px;
+            font-weight: 300;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .close-modal:hover {
+            transform: scale(1.2);
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #f9fafb;
+        }
+
+        .history-stats {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            font-size: 14px;
+            color: #374151;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .history-region-group {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .history-region-header {
+            color: #6366f1;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .history-item {
+            padding: 10px;
+            border-left: 3px solid #e5e7eb;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .history-item.user_query {
+            border-left-color: #6366f1;
+            background: #f0f9ff;
+        }
+
+        .history-item.region_info {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .history-item.assistant_response {
+            border-left-color: #8b5cf6;
+            background: #faf5ff;
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .history-type {
+            font-weight: 600;
+        }
+
+        .history-timestamp {
+            font-style: italic;
+        }
+
+        .history-content {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn-primary, .btn-secondary {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .no-history {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+            font-size: 16px;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v5.3.0/build/ol.js"></script>
     <title>Combined Brain Viewer</title>
@@ -524,6 +954,68 @@
                     </div>
                     <button id="next" class="nav-buttons">&#11166;</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Chatbot Container -->
+    <div class="chatbot-container" id="chatbotContainer">
+        <div class="chatbot-header">
+            <h3>Brain AI Assistant<span id="currentRegion" class="current-region"></span></h3>
+            <div class="history-controls">
+                <button class="history-btn" id="historyBtn" title="View Chat History">📜</button>
+                <button class="clear-btn" id="clearBtn" title="Clear Chat History">🗑️</button>
+            </div>
+            <button class="chatbot-close" id="chatbotClose">&times;</button>
+        </div>
+        <div class="chatbot-messages" id="chatMessages">
+            <!-- Messages will be added dynamically -->
+        </div>
+        <div class="chatbot-input-container">
+            <div class="mode-selector">
+                <label>
+                    <input type="radio" name="mode" value="fast" checked> Fast
+                </label>
+                <label>
+                    <input type="radio" name="mode" value="web"> Detailed (Web)
+                </label>
+                <label>
+                    <input type="radio" name="mode" value="ultra"> Ultra-fast
+                </label>
+            </div>
+            <div class="chat-input">
+                <input type="text" id="questionInput" placeholder="Ask a question about the selected brain region...">
+                <button id="askBtn" disabled>Ask</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chatbot Toggle Button -->
+    <button class="chatbot-toggle" id="chatbotToggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+        </svg>
+    </button>
+
+    <!-- Chat History Modal -->
+    <div class="modal" id="historyModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Chat History</h3>
+                <span class="close-modal" id="closeHistoryModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="history-stats">
+                    <span id="historyStats">Loading...</span>
+                </div>
+                <div class="history-list" id="historyList">
+                    <!-- History items will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="downloadHistory">Download History</button>
+                <button class="btn-primary" id="closeHistoryBtn">Close</button>
             </div>
         </div>
     </div>
@@ -1399,6 +1891,385 @@
         window.addEventListener('load', function() {
             initializeAtlasViewer();
             fetchImages();
+        });
+
+        // ==================== Chatbot Functionality ====================
+        let currentBrainRegion = null;
+        let isWaitingForResponse = false;
+
+        // DOM elements for chatbot
+        const chatbotContainer = document.getElementById('chatbotContainer');
+        const chatbotToggle = document.getElementById('chatbotToggle');
+        const chatbotClose = document.getElementById('chatbotClose');
+        const chatMessages = document.getElementById('chatMessages');
+        const questionInput = document.getElementById('questionInput');
+        const askBtn = document.getElementById('askBtn');
+        const currentRegionSpan = document.getElementById('currentRegion');
+        const historyBtn = document.getElementById('historyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const historyModal = document.getElementById('historyModal');
+        const closeHistoryModal = document.getElementById('closeHistoryModal');
+        const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+        const historyList = document.getElementById('historyList');
+        const historyStats = document.getElementById('historyStats');
+        const downloadHistory = document.getElementById('downloadHistory');
+
+        // Initialize chatbot event listeners
+        chatbotToggle.addEventListener('click', () => {
+            chatbotContainer.classList.toggle('active');
+        });
+
+        chatbotClose.addEventListener('click', () => {
+            chatbotContainer.classList.remove('active');
+        });
+
+
+        askBtn.addEventListener('click', handleAskQuestion);
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !askBtn.disabled) {
+                handleAskQuestion();
+            }
+        });
+
+        // History button
+        historyBtn.addEventListener('click', () => {
+            showChatHistory();
+        });
+
+        // Clear history button
+        clearBtn.addEventListener('click', () => {
+            clearChatHistory();
+        });
+
+        // History modal close handlers
+        closeHistoryModal.addEventListener('click', () => {
+            historyModal.style.display = 'none';
+        });
+        
+        closeHistoryBtn.addEventListener('click', () => {
+            historyModal.style.display = 'none';
+        });
+
+        // Download history button
+        downloadHistory.addEventListener('click', () => {
+            downloadChatHistory();
+        });
+
+        // Close modal when clicking outside
+        historyModal.addEventListener('click', (e) => {
+            if (e.target === historyModal) {
+                historyModal.style.display = 'none';
+            }
+        });
+
+        // Enable/disable ask button based on input
+        questionInput.addEventListener('input', () => {
+            if (currentBrainRegion && questionInput.value.trim()) {
+                askBtn.disabled = false;
+            } else {
+                askBtn.disabled = true;
+            }
+        });
+
+
+        async function selectBrainRegion(regionName) {
+            if (isWaitingForResponse) return;
+
+            // Show chatbot
+            chatbotContainer.classList.add('active');
+            
+            // Update UI
+            currentBrainRegion = regionName;
+            currentRegionSpan.textContent = ` - ${regionName}`;
+            askBtn.disabled = false;
+            
+            // Add user message
+            addMessage(`Tell me about the ${regionName}`, 'user');
+            
+            // Show loading
+            const loadingMsg = addMessage('', 'bot');
+            loadingMsg.innerHTML = '<div class="loading"></div> Analyzing brain region...';
+            
+            // Get selected mode
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            
+            isWaitingForResponse = true;
+            
+            try {
+                const response = await fetch('/api/brain-region', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        region: regionName,
+                        mode: mode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading message
+                loadingMsg.remove();
+                
+                if (data.success) {
+                    addMessage(data.message, 'bot');
+                } else {
+                    addMessage(`Error: ${data.message}`, 'bot');
+                    currentBrainRegion = null;
+                    currentRegionSpan.textContent = '';
+                    askBtn.disabled = true;
+                }
+            } catch (error) {
+                loadingMsg.remove();
+                addMessage(`Error: ${error.message}`, 'bot');
+            } finally {
+                isWaitingForResponse = false;
+            }
+        }
+
+        async function handleAskQuestion() {
+            const question = questionInput.value.trim();
+            if (!question || !currentBrainRegion || isWaitingForResponse) return;
+            
+            // Add user message
+            addMessage(question, 'user');
+            
+            // Clear input
+            questionInput.value = '';
+            
+            // Show loading
+            const loadingMsg = addMessage('', 'bot');
+            loadingMsg.innerHTML = '<div class="loading"></div> Thinking...';
+            
+            // Get selected mode to determine if web search should be used
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const useWeb = (mode === 'web'); // Automatically use web for 'Detailed (Web)' mode
+            
+            isWaitingForResponse = true;
+            
+            try {
+                const response = await fetch('/api/ask-question', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        use_web: useWeb,
+                        mode: mode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading message
+                loadingMsg.remove();
+                
+                if (data.success) {
+                    addMessage(data.message, 'bot');
+                } else {
+                    addMessage(`Error: ${data.message}`, 'bot');
+                }
+            } catch (error) {
+                loadingMsg.remove();
+                addMessage(`Error: ${error.message}`, 'bot');
+            } finally {
+                isWaitingForResponse = false;
+            }
+        }
+
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            const messageP = document.createElement('p');
+            messageP.textContent = text;
+            
+            messageDiv.appendChild(messageP);
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            return messageP;
+        }
+
+        async function showChatHistory() {
+            try {
+                const response = await fetch('/api/chat-history');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayChatHistory(data.chat_history, data.current_region, data.current_mode);
+                    historyModal.style.display = 'block';
+                } else {
+                    alert('Error loading chat history: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error loading chat history: ' + error.message);
+            }
+        }
+
+        function displayChatHistory(history, currentRegion, currentMode) {
+            // Update stats
+            const totalMessages = history.length;
+            const userQuestions = history.filter(msg => msg.type === 'user_query').length;
+            const regions = [...new Set(history.filter(msg => msg.region).map(msg => msg.region))];
+            
+            historyStats.innerHTML = `
+                <strong>Chat Statistics:</strong> 
+                ${totalMessages} total messages, 
+                ${userQuestions} questions asked, 
+                ${regions.length} regions explored
+                ${currentRegion ? `<br><strong>Current:</strong> ${currentRegion} (${currentMode || 'fast'} mode)` : ''}
+            `;
+            
+            // Clear previous history
+            historyList.innerHTML = '';
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<div class="no-history">No chat history yet. Start exploring brain regions!</div>';
+                return;
+            }
+            
+            // Group messages by region for better organization
+            const groupedHistory = {};
+            history.forEach((msg, index) => {
+                const region = msg.region || 'General';
+                if (!groupedHistory[region]) {
+                    groupedHistory[region] = [];
+                }
+                groupedHistory[region].push({...msg, index});
+            });
+            
+            // Display grouped history
+            Object.keys(groupedHistory).forEach(region => {
+                const regionDiv = document.createElement('div');
+                regionDiv.className = 'history-region-group';
+                
+                const regionHeader = document.createElement('h4');
+                regionHeader.className = 'history-region-header';
+                regionHeader.textContent = region;
+                regionDiv.appendChild(regionHeader);
+                
+                groupedHistory[region].forEach(msg => {
+                    const historyItem = document.createElement('div');
+                    historyItem.className = `history-item ${msg.type}`;
+                    
+                    const timestamp = new Date(msg.timestamp).toLocaleString();
+                    const typeLabel = {
+                        'user_query': '❓ Question',
+                        'region_info': '🧠 Region Info', 
+                        'assistant_response': '🤖 Answer'
+                    }[msg.type] || '💬 Message';
+                    
+                    historyItem.innerHTML = `
+                        <div class="history-item-header">
+                            <span class="history-type">${typeLabel}</span>
+                            <span class="history-timestamp">${timestamp}</span>
+                        </div>
+                        <div class="history-content">${msg.content}</div>
+                    `;
+                    
+                    regionDiv.appendChild(historyItem);
+                });
+                
+                historyList.appendChild(regionDiv);
+            });
+        }
+
+        async function downloadChatHistory() {
+            try {
+                const response = await fetch('/api/chat-history');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const historyText = formatHistoryForDownload(data.chat_history);
+                    const blob = new Blob([historyText], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `brain-assistant-history-${new Date().toISOString().split('T')[0]}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('Error downloading chat history: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error downloading chat history: ' + error.message);
+            }
+        }
+
+        function formatHistoryForDownload(history) {
+            let text = 'Brain Assistant Chat History\n';
+            text += '================================\n';
+            text += `Generated on: ${new Date().toLocaleString()}\n\n`;
+            
+            let currentRegion = '';
+            
+            history.forEach((msg, index) => {
+                const timestamp = new Date(msg.timestamp).toLocaleString();
+                
+                // Add region header when it changes
+                if (msg.region && msg.region !== currentRegion) {
+                    currentRegion = msg.region;
+                    text += `\n--- ${currentRegion.toUpperCase()} ---\n`;
+                }
+                
+                const typeLabel = {
+                    'user_query': 'USER',
+                    'region_info': 'ASSISTANT (Region Info)',
+                    'assistant_response': 'ASSISTANT'
+                }[msg.type] || 'MESSAGE';
+                
+                text += `[${timestamp}] ${typeLabel}:\n${msg.content}\n\n`;
+            });
+            
+            return text;
+        }
+
+        async function clearChatHistory() {
+            if (!confirm('Are you sure you want to clear all chat history? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/chat-history', {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Clear the chat messages UI
+                    chatMessages.innerHTML = '';
+                    currentBrainRegion = null;
+                    currentRegionSpan.textContent = '';
+                    askBtn.disabled = true;
+                    alert('Chat history cleared successfully!');
+                    // Close history modal if open
+                    historyModal.style.display = 'none';
+                } else {
+                    alert('Error clearing chat history: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error clearing chat history: ' + error.message);
+            }
+        }
+
+        // Integration with atlas viewer - when a region is clicked
+        window.addEventListener('message', (event) => {
+            if (event.data.tool_name === 'atlas_viewer' && event.data.params) {
+                const { name, id } = event.data.params;
+                if (name && id !== -1) {
+                    // Auto-select the brain region in chatbot
+                    selectBrainRegion(name);
+                }
+            }
         });
 
     </script>
