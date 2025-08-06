@@ -388,7 +388,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow: auto;
             transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
@@ -407,7 +407,8 @@
             width: 100%;
             height: 100%;
             border: none;
-            overflow: hidden;
+            overflow: auto;
+            position: relative;
             transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
@@ -498,7 +499,7 @@
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            z-index: 2;
+            z-index: 10;
             width: 48px;
             height: 48px;
             display: flex;
@@ -519,18 +520,43 @@
         }
 
         #prev {
-            left: 5px;
+            left: 10px;
         }
 
         #next {
-            right: 5px;
+            right: 10px;
         }
 
         .nav-buttons:disabled {
-            opacity: 0.4;
+            opacity: 0.3;
             cursor: not-allowed;
             background: #9ca3af;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            pointer-events: none;
+            transform: translateY(-50%) scale(0.9);
+        }
+
+        /* Ensure buttons are always visible on hover */
+        .container:hover .nav-buttons {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Add responsive button positioning */
+        @media (max-width: 768px) {
+            .nav-buttons {
+                width: 40px;
+                height: 40px;
+                font-size: 14px;
+            }
+            
+            #prev {
+                left: 5px;
+            }
+            
+            #next {
+                right: 5px;
+            }
         }
 
         .selected {
@@ -1905,11 +1931,11 @@
         }
 
         function scrollImages(direction) {
-            if (isAnimating) return;
+            if (isAnimating || !imagesData.length) return;
             isAnimating = true;
 
             const columns = calculateColumns();
-            const rows = Math.ceil((window.innerHeight - 100) / 100);
+            const rows = calculateRows();
             const imagesPerPage = columns * rows;
             let nextIndex = startIndex;
 
@@ -1926,16 +1952,22 @@
                 return;
             }
 
-            const newGrid = startIndex < nextIndex ? grid2 : grid1;
-            renderImages(newGrid, nextIndex);
-
-            gridWrapper.style.transition = "transform 0.5s ease-in-out";
-            gridWrapper.style.transform = `translateX(${startIndex < nextIndex ? "-100%" : "100%"})`;
+            // Use smooth scrolling animation
+            const container = document.querySelector('.image-grid-container');
+            const targetGrid = startIndex < nextIndex ? grid2 : grid1;
+            
+            // Render new images in the target grid
+            renderImages(targetGrid, nextIndex);
+            
+            // Create smooth transition
+            gridWrapper.style.transition = "transform 0.3s ease-in-out";
+            gridWrapper.style.transform = `translateX(${startIndex < nextIndex ? "-50%" : "50%"})`;
 
             setTimeout(() => {
                 gridWrapper.style.transition = "none";
                 gridWrapper.style.transform = "translateX(0)";
 
+                // Copy content to main grid
                 if (startIndex < nextIndex) {
                     grid1.innerHTML = grid2.innerHTML;
                 } else {
@@ -1945,20 +1977,51 @@
                 startIndex = nextIndex;
                 isAnimating = false;
                 updatePaginationButtons();
-            }, 500);
+            }, 300);
         }
 
         function updatePaginationButtons() {
+            if (!imagesData.length) {
+                prevButton.disabled = true;
+                nextButton.disabled = true;
+                prevButton.style.display = 'none';
+                nextButton.style.display = 'none';
+                return;
+            }
+
             const columns = calculateColumns();
-            const rows = Math.ceil((window.innerHeight - 100) / 100);
+            const rows = calculateRows();
             const imagesPerPage = columns * rows;
 
-            prevButton.disabled = startIndex === 0;
-            nextButton.disabled = startIndex + imagesPerPage >= imagesData.length;
+            const canGoPrev = startIndex > 0;
+            const canGoNext = startIndex + imagesPerPage < imagesData.length;
+
+            prevButton.disabled = !canGoPrev;
+            nextButton.disabled = !canGoNext;
+            
+            // Show/hide buttons based on availability
+            prevButton.style.display = canGoPrev ? 'flex' : 'none';
+            nextButton.style.display = canGoNext ? 'flex' : 'none';
+            
+            // Update button opacity for better visual feedback
+            prevButton.style.opacity = canGoPrev ? '1' : '0.3';
+            nextButton.style.opacity = canGoNext ? '1' : '0.3';
         }
 
-        prevButton.addEventListener("click", () => scrollImages("prev"));
-        nextButton.addEventListener("click", () => scrollImages("next"));
+        // Enhanced navigation button event listeners
+        prevButton.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!prevButton.disabled) {
+                scrollImages("prev");
+            }
+        });
+        
+        nextButton.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!nextButton.disabled) {
+                scrollImages("next");
+            }
+        });
         
         window.addEventListener("resize", () => {
             const columns = calculateColumns();
@@ -1986,6 +2049,42 @@
         document.getElementById('series-select').addEventListener('change', function(e) {
             currentSeriesType = e.target.value;
             fetchImages();
+        });
+
+        // Add scroll wheel support for navigation
+        document.querySelector('.image-grid-container').addEventListener('wheel', function(e) {
+            if (e.deltaY > 0) {
+                // Scroll down - next page
+                if (!nextButton.disabled) {
+                    e.preventDefault();
+                    scrollImages('next');
+                }
+            } else {
+                // Scroll up - previous page
+                if (!prevButton.disabled) {
+                    e.preventDefault();
+                    scrollImages('prev');
+                }
+            }
+        });
+
+        // Add keyboard support
+        document.addEventListener('keydown', function(e) {
+            // Only handle keys when focus is on thumbnail area or no input is focused
+            const focusedElement = document.activeElement;
+            const isInputFocused = focusedElement.tagName === 'INPUT' || 
+                                 focusedElement.tagName === 'TEXTAREA' || 
+                                 focusedElement.contentEditable === 'true';
+            
+            if (!isInputFocused) {
+                if (e.key === 'ArrowLeft' && !prevButton.disabled) {
+                    e.preventDefault();
+                    scrollImages('prev');
+                } else if (e.key === 'ArrowRight' && !nextButton.disabled) {
+                    e.preventDefault();
+                    scrollImages('next');
+                }
+            }
         });
 
         // ==================== Message Handlers ====================
