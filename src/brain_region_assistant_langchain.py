@@ -97,12 +97,12 @@ class LocalLlamaLLM(LLM):
 class ImprovedWebSearchTool:
     """Improved web search tool with multiple fallback options"""
     
-    def __init__(self, max_retries: int = 2, base_delay: int = 2, max_sources: int = 12):
+    def __init__(self, max_retries: int = 2, base_delay: int = 2, max_sources: int = 15):
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.last_search_time = 0
         self.min_search_interval = 4  # Optimized for maximum comprehensive searches
-        self.max_sources = max_sources  # Increased default to 12 sources for maximum comprehensive results
+        self.max_sources = max_sources  # Increased default to 15 sources for maximum comprehensive results
         
         # Try to initialize DuckDuckGo
         try:
@@ -143,6 +143,42 @@ class ImprovedWebSearchTool:
         
         self.last_search_time = time.time()
     
+    def _contains_non_english_chars(self, text: str) -> bool:
+        """Check if text contains Japanese, Chinese, Korean, or other non-English characters"""
+        # Japanese characters (Hiragana, Katakana, Kanji)
+        japanese_pattern = r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]'
+        # Chinese characters
+        chinese_pattern = r'[\u4E00-\u9FFF]'
+        # Korean characters
+        korean_pattern = r'[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]'
+        # Arabic characters
+        arabic_pattern = r'[\u0600-\u06FF]'
+        # Russian/Cyrillic characters
+        cyrillic_pattern = r'[\u0400-\u04FF]'
+        
+        patterns = [japanese_pattern, chinese_pattern, korean_pattern, arabic_pattern, cyrillic_pattern]
+        
+        for pattern in patterns:
+            if re.search(pattern, text):
+                return True
+        return False
+    
+    def _contains_english_indicators(self, text: str) -> bool:
+        """Check if text contains common English words/patterns"""
+        english_indicators = [
+            'the', 'and', 'of', 'in', 'to', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had',
+            'brain', 'neuron', 'anatomy', 'function', 'research', 'study', 'medical', 'clinical', 'patient',
+            'treatment', 'disorder', 'disease', 'syndrome', 'condition', 'symptoms', 'diagnosis', 'therapy',
+            'nervous', 'system', 'cortex', 'region', 'area', 'structure', 'tissue', 'cell', 'neural',
+            'with', 'from', 'by', 'about', 'through', 'during', 'before', 'after', 'above', 'below',
+            'this', 'that', 'these', 'those', 'can', 'will', 'may', 'also', 'such', 'more', 'other'
+        ]
+        
+        text_lower = text.lower()
+        # Reduced requirement to at least 2 different English indicators
+        found_indicators = sum(1 for indicator in english_indicators if indicator in text_lower)
+        return found_indicators >= 2
+    
     def _retry_with_backoff(self, func, *args, max_retries=1, base_delay=1):
         """Generic retry function with faster retries for speed optimization"""
         for attempt in range(max_retries + 1):  # Reduced default retries to 1 for speed
@@ -164,17 +200,25 @@ class ImprovedWebSearchTool:
         return None
     
     def _try_ddg_search_without_retry(self, query: str) -> Optional[str]:
-        """Try DuckDuckGo search - fail immediately on rate limit"""
+        """Try DuckDuckGo search with English results only - fail immediately on rate limit"""
         if not self.ddg_available:
             return None
         
         try:
             self._wait_for_rate_limit("ddg")
-            result = self.ddg_search.run(query)
+            # Force English results by adding language hints to query
+            english_query = f"{query} brain anatomy neuroscience english"
+            result = self.ddg_search.run(english_query)
             
             if result and len(result.strip()) > 20:  # Valid result
-                print("✓ DuckDuckGo search successful")
-                return result
+                # Enhanced filtering for English content only
+                if (not self._contains_non_english_chars(result) and 
+                    self._contains_english_indicators(result)):
+                    print("✓ DuckDuckGo search successful (English)")
+                    return result
+                else:
+                    print("⚠ DuckDuckGo returned non-English results - skipping to other methods")
+                    return None
             
         except Exception as e:
             error_msg = str(e).lower()
@@ -187,15 +231,16 @@ class ImprovedWebSearchTool:
         return None
     
     def _try_instant_answer_api_without_retry(self, query: str) -> Optional[str]:
-        """Try DuckDuckGo instant answer API - fail immediately on issues"""
+        """Try DuckDuckGo instant answer API with English results - fail immediately on issues"""
         try:
             self._wait_for_rate_limit("ddg")
             url = "https://api.duckduckgo.com/"
             params = {
-                'q': query,
+                'q': f"{query} brain anatomy neuroscience",
                 'format': 'json',
                 'no_html': '1',
-                'skip_disambig': '1'
+                'skip_disambig': '1',
+                'region': 'us-en'  # Force English results
             }
             
             response = requests.get(url, params=params, timeout=10)
@@ -257,14 +302,15 @@ class ImprovedWebSearchTool:
             # Clean up spaces and extract main term
             brain_region = ' '.join(brain_region.split()).strip()
             
-            # Try Wikipedia search API first to find the best match
+            # Try Wikipedia search API first to find the best match (force English)
             search_url = "https://en.wikipedia.org/w/api.php"
             search_params = {
                 'action': 'query',
                 'format': 'json',
                 'list': 'search',
-                'srsearch': brain_region + ' brain',
-                'srlimit': 3
+                'srsearch': brain_region + ' brain anatomy',
+                'srlimit': 3,
+                'uselang': 'en'  # Force English language
             }
             
             search_response = requests.get(search_url, params=search_params, timeout=8)
@@ -549,27 +595,48 @@ class ImprovedWebSearchTool:
             import urllib.parse
             import re
             
-            search_query = urllib.parse.quote_plus(query + " brain anatomy neuroscience")
-            # Force English results with specific parameters
-            url = f"https://www.bing.com/search?q={search_query}&count=5&setlang=en&cc=US&mkt=en-US"
+            search_query = urllib.parse.quote_plus(query + " brain anatomy neuroscience english")
+            # Force English results with multiple parameters
+            url = f"https://www.bing.com/search?q={search_query}&count=10&setlang=en&cc=US&mkt=en-US&ensearch=1&FORM=HDRSC1"
             
+            # Use more recent user agents and rotate them
+            user_agents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+            ]
+            
+            import random
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'User-Agent': random.choice(user_agents),
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
             }
             
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=15)
             
             if response.status_code == 200:
                 content = response.text
                 
-                # Multiple patterns to catch Bing search results
+                # Updated and expanded patterns for current Bing HTML structure
                 patterns = [
+                    # Main result snippets
                     r'<p class="b_lineclamp[^"]*"[^>]*>(.*?)</p>',
-                    r'<div class="b_caption"[^>]*><p>(.*?)</p>',
+                    r'<div class="b_caption"[^>]*><p[^>]*>(.*?)</p>',
+                    r'<p class="b_paractl"[^>]*>(.*?)</p>',
+                    r'<div class="b_snippet"[^>]*><p[^>]*>(.*?)</p>',
+                    # Alternative snippet patterns
                     r'<span class="algoSlug_icon"[^>]*></span>(.*?)</div>',
-                    r'data-bm="(\d+)"[^>]*><div[^>]*><div[^>]*><p[^>]*>(.*?)</p>'
+                    r'data-bm="(\d+)"[^>]*><div[^>]*><div[^>]*><p[^>]*>(.*?)</p>',
+                    # News and featured snippets
+                    r'<div class="b_rich[^"]*"[^>]*><div[^>]*><p[^>]*>(.*?)</p>',
+                    r'<div class="b_text"[^>]*>(.*?)</div>',
+                    # Knowledge panel content
+                    r'<div class="b_entitySubTypes"[^>]*>(.*?)</div>',
                 ]
                 
                 all_snippets = []
@@ -592,21 +659,41 @@ class ImprovedWebSearchTool:
                     clean_snippet = re.sub(r'&[a-zA-Z]+;', ' ', clean_snippet)  # Remove HTML entities
                     
                     # Only include substantial, unique, English content
-                    if (clean_snippet and len(clean_snippet) > 50 and 
-                        clean_snippet not in seen_content and
-                        # Basic check for English content
-                        len([c for c in clean_snippet if c.isalpha()]) > len(clean_snippet) * 0.7):
+                    if (clean_snippet and len(clean_snippet) > 30 and 
+                        clean_snippet not in seen_content):
                         
-                        seen_content.add(clean_snippet)
-                        results.append(f"• {clean_snippet}")
+                        # Check for non-English characters first
+                        if self._contains_non_english_chars(clean_snippet):
+                            continue
+                            
+                        # More lenient English check - either has English indicators OR basic English words
+                        has_english_indicators = self._contains_english_indicators(clean_snippet)
+                        has_basic_english = any(word in clean_snippet.lower() for word in ['the', 'and', 'of', 'is', 'are', 'in', 'to', 'a', 'an'])
                         
-                        if len(results) >= 3:  # Limit to top 3 results
-                            break
+                        if has_english_indicators or has_basic_english:
+                            seen_content.add(clean_snippet)
+                            results.append(f"• {clean_snippet}")
+                            
+                            if len(results) >= 5:  # Allow more results
+                                break
                 
                 if results:
-                    print("✓ Bing search successful (English results)")
+                    print(f"✓ Bing search successful ({len(results)} English results)")
                     return "Bing Search Results (English):\n" + "\n".join(results)
+                else:
+                    print("⚠ Bing search returned no valid English results")
                     
+            elif response.status_code == 429:
+                print("⚠ Bing search rate limited")
+            elif response.status_code == 403:
+                print("⚠ Bing search access forbidden (possible bot detection)")
+            else:
+                print(f"⚠ Bing search returned status code: {response.status_code}")
+                    
+        except requests.exceptions.Timeout:
+            print("⚠ Bing search timed out")
+        except requests.exceptions.RequestException as e:
+            print(f"⚠ Bing search request failed: {e}")
         except Exception as e:
             print(f"⚠ Bing search failed: {e}")
         
@@ -961,20 +1048,20 @@ class ImprovedWebSearchTool:
         results = []
         sources_tried = 0
         
-        # Maximum comprehensive search with extensive source coverage
+        # Maximum comprehensive search with extensive source coverage - prioritize English sources
         search_methods = [
-            ("🔄 DuckDuckGo search", self._try_ddg_search_without_retry if self.ddg_available else None),
             ("🔄 Wikipedia search", lambda q: self._retry_with_backoff(self._try_wikipedia_api_without_retry, q, max_retries=1)),
-            ("🔄 DuckDuckGo Instant Answer", self._try_instant_answer_api_without_retry),
             ("🔄 PubMed search", lambda q: self._retry_with_backoff(self._try_pubmed_api_without_retry, q, max_retries=1)),
             ("🔄 Bing search", lambda q: self._retry_with_backoff(self._try_bing_search_without_retry, q, max_retries=1)),
+            ("🔄 DuckDuckGo search", self._try_ddg_search_without_retry if self.ddg_available else None),
+            ("🔄 DuckDuckGo Instant Answer", self._try_instant_answer_api_without_retry),
             ("🔄 Alternative search engines", lambda q: self._retry_with_backoff(self._try_simple_google_search_without_retry, q, max_retries=1)),
-            ("🔄 Yahoo/Yandex search", lambda q: self._retry_with_backoff(self._try_yahoo_search_without_retry, q, max_retries=1)),
             ("🔄 Google API fallback", lambda q: self._retry_with_backoff(self._try_google_search_api, q, max_retries=1)),
             ("🔄 Wikipedia extended search", lambda q: self._try_wikipedia_extended_search(q)),
             ("🔄 PubMed extended search", lambda q: self._try_pubmed_extended_search(q)),
             ("🔄 Educational sources", lambda q: self._try_educational_sources_search(q)),
             ("🔄 Medical databases", lambda q: self._try_medical_databases_search(q)),
+            ("🔄 Yahoo/Yandex search", lambda q: self._retry_with_backoff(self._try_yahoo_search_without_retry, q, max_retries=1)),
         ]
         
         # Try sources until we have enough results or reach max_sources
@@ -1052,7 +1139,7 @@ class UltraFastBrainAssistant:
         if self.use_web_search:
             try:
                 self.llm = LocalLlamaLLM()
-                self.web_search = ImprovedWebSearchTool(max_sources=12)  # Increased default to 12 sources for maximum coverage
+                self.web_search = ImprovedWebSearchTool(max_sources=15)  # Increased default to 15 sources for maximum coverage
                 
                 # Create a wrapper function for the search tool
                 def search_wrapper(query: str) -> str:

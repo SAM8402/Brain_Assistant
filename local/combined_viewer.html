@@ -26,10 +26,10 @@
             min-height: 100vh;
         }
 
-        /* Main container with 2 rows */
+        /* Main container with flexible layout */
         .main-container {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             height: calc(100vh - 16px);
             width: calc(100vw - 16px);
             max-width: 1920px;
@@ -40,6 +40,46 @@
             overflow: hidden;
             position: relative;
         }
+
+        /* Viewers column - takes full width when chatbot is closed */
+        .viewers-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        /* Chatbot column - positioned absolutely, no space reserved when closed */
+        .chatbot-column {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 400px;
+            height: 100%;
+            background: #f8fafc;
+            border-left: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transform: translateX(100%);
+            overflow: hidden;
+            z-index: 1000;
+        }
+
+        /* When chatbot is active, shrink the viewers and show chatbot */
+        .main-container.chatbot-active .viewers-column {
+            width: calc(100% - 400px);
+        }
+
+        .chatbot-column.active {
+            transform: translateX(0);
+        }
+
+        .chatbot-column.active .chatbot-container {
+            opacity: 1;
+            transform: translateY(0);
+        }
         
         @media (max-width: 768px) {
             .main-container {
@@ -47,6 +87,64 @@
                 border-radius: 8px;
                 height: calc(100vh - 8px);
                 width: calc(100vw - 8px);
+            }
+            
+            .chatbot-column {
+                width: 100vw;
+                position: absolute;
+                top: 0;
+                right: 0;
+                height: 100vh;
+                z-index: 2000;
+                background: #ffffff;
+                box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+                transform: translateX(100%);
+            }
+            
+            .chatbot-column.active {
+                transform: translateX(0);
+            }
+            
+            /* On mobile, don't shrink viewers - use overlay */
+            .main-container.chatbot-active .viewers-column {
+                width: 100%;
+            }
+            
+            .chatbot-toggle {
+                right: 15px;
+                width: 45px;
+                height: 45px;
+            }
+            
+            .chatbot-toggle svg {
+                width: 24px;
+                height: 24px;
+            }
+        }
+        
+        @media (min-width: 769px) and (max-width: 1200px) {
+            .chatbot-column {
+                width: 350px;
+            }
+        }
+        
+        @media (min-width: 1201px) {
+            .chatbot-column {
+                width: 450px;
+            }
+            
+            .main-container.chatbot-active .viewers-column {
+                width: calc(100% - 450px);
+            }
+        }
+        
+        @media (min-width: 769px) and (max-width: 1200px) {
+            .chatbot-column {
+                width: 350px;
+            }
+            
+            .main-container.chatbot-active .viewers-column {
+                width: calc(100% - 350px);
             }
         }
 
@@ -57,7 +155,8 @@
             position: relative;
             border-bottom: 1px solid #e5e7eb;
             background: #ffffff;
-            border-radius: 16px 16px 0 0;
+            border-radius: 16px 0 0 0;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         /* Bottom row for thumbnail viewer */
@@ -67,23 +166,24 @@
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             display: flex;
             flex-direction: column;
-            border-radius: 0 0 16px 16px;
+            border-radius: 0 0 0 16px;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         /* Resize handle between panels */
         .resize-handle {
             height: 6px;
-            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            background: linear-gradient(90deg, #2563eb, #3b82f6);
             cursor: row-resize;
             position: relative;
             z-index: 1000;
-            transition: all 0.2s ease;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .resize-handle:hover {
             height: 8px;
-            background: linear-gradient(90deg, #4f46e5, #7c3aed);
-            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+            background: linear-gradient(90deg, #1d4ed8, #2563eb);
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
         }
 
         .resize-handle::after {
@@ -106,6 +206,7 @@
             background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
             border-bottom: 1px solid #e5e7eb;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .header p {
@@ -156,6 +257,7 @@
             width: 100%;
             position: relative;
             top: 40px;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         /* Control panel container */
@@ -238,8 +340,8 @@
             font-size: 10px;
             font-weight: 600;
             margin-top: 6px;
-            color: #6366f1;
-            background: rgba(99, 102, 241, 0.1);
+            color: #2563eb;
+            background: rgba(37, 99, 235, 0.1);
             padding: 2px 6px;
             border-radius: 4px;
         }
@@ -273,7 +375,7 @@
             width: 14px;
             height: 14px;
             transition: all 0.3s ease;
-            color: #6366f1;
+            color: #2563eb;
         }
 
         .eye-icon.hidden {
@@ -287,6 +389,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .container {
@@ -297,6 +400,7 @@
             margin-bottom: 10px;
             position: relative;
             flex: 1;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .image-grid-container {
@@ -304,6 +408,7 @@
             height: 100%;
             border: none;
             overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .image-grid {
@@ -313,12 +418,13 @@
             height: 100%;
             padding: 10px;
             box-sizing: border-box;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .image-grid-wrapper {
             display: flex;
             width: 200%;
-            transition: transform 0.5s ease-in-out;
+            transition: transform 0.5s ease-in-out, width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .image-container {
@@ -326,7 +432,7 @@
             border: 2px solid #e5e7eb;
             padding: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             background: #ffffff;
             display: flex;
             justify-content: center;
@@ -359,7 +465,7 @@
         .image-container:hover {
             transform: translateY(-4px) scale(1.05);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-            border-color: #6366f1;
+            border-color: #2563eb;
         }
 
         .image-container img {
@@ -386,7 +492,7 @@
             font-size: 18px;
             cursor: pointer;
             border: none;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
             border-radius: 50%;
             position: absolute;
@@ -398,14 +504,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .nav-buttons:hover:not(:disabled) {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
             transform: translateY(-50%) scale(1.1);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
         }
 
         .nav-buttons:active:not(:disabled) {
@@ -428,8 +534,8 @@
         }
 
         .selected {
-            border: 3px solid #6366f1 !important;
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2), 0 8px 25px rgba(99, 102, 241, 0.3) !important;
+            border: 3px solid #2563eb !important;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2), 0 8px 25px rgba(37, 99, 235, 0.3) !important;
             transform: translateY(-2px) !important;
         }
 
@@ -439,6 +545,7 @@
             align-items: center;
             gap: 8px;
             margin-left: 16px;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .series-selector select {
@@ -450,42 +557,34 @@
             background: #ffffff;
             color: #374151;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .series-selector select:hover {
-            border-color: #6366f1;
+            border-color: #2563eb;
         }
 
         .series-selector select:focus {
             outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         /* Chatbot styles */
         .chatbot-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 400px;
-            height: 500px;
+            height: 100%;
             background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            display: none;
-            flex-direction: column;
-            z-index: 2000;
-            transition: all 0.3s ease;
-        }
-
-        .chatbot-container.active {
+            border-radius: 0 16px 16px 0;
             display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+            opacity: 0.95;
+            transform: translateY(10px);
         }
 
         .chatbot-header {
             padding: 20px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
             border-radius: 16px 16px 0 0;
             display: flex;
@@ -534,7 +633,7 @@
         }
 
         .user-message p {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
             padding: 12px 16px;
             border-radius: 12px 12px 4px 12px;
@@ -556,6 +655,28 @@
             max-width: 80%;
             margin: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            line-height: 1.5;
+        }
+        
+        /* Formatting styles for bot messages */
+        .bot-message p strong {
+            font-weight: 700;
+            color: #1f2937;
+        }
+        
+        .bot-message p em {
+            font-style: italic;
+            color: #4b5563;
+        }
+        
+        .bot-message p u {
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        
+        /* Better spacing for formatted content */
+        .bot-message p br + br {
+            line-height: 0.5;
         }
 
         .chatbot-input-container {
@@ -600,13 +721,13 @@
 
         .chat-input input:focus {
             outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .chat-input button {
             padding: 12px 20px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
             border: none;
             border-radius: 8px;
@@ -617,7 +738,7 @@
 
         .chat-input button:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
         .chat-input button:disabled {
@@ -627,29 +748,45 @@
 
         .chatbot-toggle {
             position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            top: 50%;
+            right: 10px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             border-radius: 50%;
+            border: none;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             z-index: 1999;
+            transform: translateY(-50%);
         }
 
         .chatbot-toggle:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+        }
+
+        .chatbot-toggle.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-50%) translateX(20px);
         }
 
         .chatbot-toggle svg {
-            width: 30px;
-            height: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .chatbot-toggle:hover svg {
+            transform: scale(1.1);
+        }
+
+        .chatbot-toggle svg {
+            width: 26px;
+            height: 26px;
             color: white;
         }
 
@@ -658,7 +795,7 @@
             width: 20px;
             height: 20px;
             border: 3px solid #f3f3f3;
-            border-top: 3px solid #6366f1;
+            border-top: 3px solid #2563eb;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-right: 10px;
@@ -697,7 +834,7 @@
 
 
         .current-region {
-            color: #6366f1;
+            color: #2563eb;
             font-weight: 600;
             margin-left: 10px;
         }
@@ -741,7 +878,7 @@
         }
 
         .modal-header {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
             padding: 20px;
             display: flex;
@@ -798,7 +935,7 @@
         }
 
         .history-region-header {
-            color: #6366f1;
+            color: #2563eb;
             font-weight: 600;
             margin-bottom: 10px;
             font-size: 16px;
@@ -812,8 +949,8 @@
         }
 
         .history-item.user_query {
-            border-left-color: #6366f1;
-            background: #f0f9ff;
+            border-left-color: #2563eb;
+            background: #dbeafe;
         }
 
         .history-item.region_info {
@@ -822,8 +959,8 @@
         }
 
         .history-item.assistant_response {
-            border-left-color: #8b5cf6;
-            background: #faf5ff;
+            border-left-color: #3b82f6;
+            background: #eff6ff;
         }
 
         .history-item-header {
@@ -867,13 +1004,13 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: white;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
         .btn-secondary {
@@ -898,98 +1035,104 @@
 
 <body style="height:100%;">
     <div class="main-container">
-        <!-- Top row: Atlas viewer panel -->
-        <div class="atlas-panel">
-            <div class="header">
-                <p>Atlas Viewer - Biosample: <span id="atlas-biosample">222</span> Section: <span id="atlas-section">1000</span></p>
-            </div>
-            <div class="name-container">
-                <span class="feature-name" id="feature-name"></span>
-            </div>
-            <div id="map" class="map"></div>
-
-            <!-- Control panel -->
-            <div class="control-panel">
-                <!-- Opacity slider control -->
-                <div class="slider-container">
-                    <input type="range" min="0" max="99" value="50" class="slider" id="opacity-slider" orient="vertical">
-                    <div class="opacity-value" id="opacity-value">50</div>
+        <!-- Left column: Viewers -->
+        <div class="viewers-column">
+            <!-- Top row: Atlas viewer panel -->
+            <div class="atlas-panel">
+                <div class="header">
+                    <p>Atlas Viewer - Biosample: <span id="atlas-biosample">222</span> Section: <span id="atlas-section">1000</span></p>
                 </div>
-
-                <!-- Eye toggle button -->
-                <div class="eye-toggle-container" id="eye-toggle" title="Toggle annotations visibility">
-                    <svg class="eye-icon" id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
+                <div class="name-container">
+                    <span class="feature-name" id="feature-name"></span>
                 </div>
-            </div>
-        </div>
+                <div id="map" class="map"></div>
 
-        <!-- Resize handle -->
-        <div class="resize-handle"></div>
-
-        <!-- Bottom row: Thumbnail viewer panel -->
-        <div class="thumbnail-panel" id="thumbnail-panel">
-            <div class="header">
-                <p>Thumbnail Viewer - Biosample: <span id="thumbnail-biosample">222</span> 
-                   <span class="series-selector">
-                       Series: <select id="series-select">
-                           <option value="NISSL">NISSL</option>
-                           <option value="HEOS">H&E</option>
-                           <option value="BFI">Block Face Image</option>
-                           <option value="MYEL">Myelin</option>
-                       </select>
-                   </span>
-                </p>
-            </div>
-            <div class="thumbnail-content">
-                <div class="container">
-                    <button id="prev" class="nav-buttons" disabled>&#11164;</button>
-                    <div class="image-grid-container">
-                        <div class="image-grid-wrapper">
-                            <div id="image-grid-1" class="image-grid"></div>
-                            <div id="image-grid-2" class="image-grid"></div>
-                        </div>
+                <!-- Control panel -->
+                <div class="control-panel">
+                    <!-- Opacity slider control -->
+                    <div class="slider-container">
+                        <input type="range" min="0" max="99" value="50" class="slider" id="opacity-slider" orient="vertical">
+                        <div class="opacity-value" id="opacity-value">50</div>
                     </div>
-                    <button id="next" class="nav-buttons">&#11166;</button>
+
+                    <!-- Eye toggle button -->
+                    <div class="eye-toggle-container" id="eye-toggle" title="Toggle annotations visibility">
+                        <svg class="eye-icon" id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resize handle -->
+            <div class="resize-handle"></div>
+
+            <!-- Bottom row: Thumbnail viewer panel -->
+            <div class="thumbnail-panel" id="thumbnail-panel">
+                <div class="header">
+                    <p>Thumbnail Viewer - Biosample: <span id="thumbnail-biosample">222</span> 
+                       <span class="series-selector">
+                           Series: <select id="series-select">
+                               <option value="NISSL">NISSL</option>
+                               <option value="HEOS">H&E</option>
+                               <option value="BFI">Block Face Image</option>
+                               <option value="MYEL">Myelin</option>
+                           </select>
+                       </span>
+                    </p>
+                </div>
+                <div class="thumbnail-content">
+                    <div class="container">
+                        <button id="prev" class="nav-buttons" disabled>&#11164;</button>
+                        <div class="image-grid-container">
+                            <div class="image-grid-wrapper">
+                                <div id="image-grid-1" class="image-grid"></div>
+                                <div id="image-grid-2" class="image-grid"></div>
+                            </div>
+                        </div>
+                        <button id="next" class="nav-buttons">&#11166;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right column: Chatbot -->
+        <div class="chatbot-column" id="chatbotColumn">
+            <!-- Chatbot Container -->
+            <div class="chatbot-container" id="chatbotContainer">
+                <div class="chatbot-header">
+                    <h3>Brain AI Assistant<span id="currentRegion" class="current-region"></span></h3>
+                    <div class="history-controls">
+                        <button class="history-btn" id="historyBtn" title="View Chat History">📜</button>
+                        <button class="clear-btn" id="clearBtn" title="Clear Chat History">🗑️</button>
+                    </div>
+                    <button class="chatbot-close" id="chatbotClose">&times;</button>
+                </div>
+                <div class="chatbot-messages" id="chatMessages">
+                    <!-- Messages will be added dynamically -->
+                </div>
+                <div class="chatbot-input-container">
+                    <div class="mode-selector">
+                        <label>
+                            <input type="radio" name="mode" value="fast" checked> Fast
+                        </label>
+                        <label>
+                            <input type="radio" name="mode" value="web"> Detailed (Web)
+                        </label>
+                        <label>
+                            <input type="radio" name="mode" value="ultra"> Ultra-fast
+                        </label>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="questionInput" placeholder="Ask a question about the selected brain region...">
+                        <button id="askBtn" disabled>Ask</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-
-    <!-- Chatbot Container -->
-    <div class="chatbot-container" id="chatbotContainer">
-        <div class="chatbot-header">
-            <h3>Brain AI Assistant<span id="currentRegion" class="current-region"></span></h3>
-            <div class="history-controls">
-                <button class="history-btn" id="historyBtn" title="View Chat History">📜</button>
-                <button class="clear-btn" id="clearBtn" title="Clear Chat History">🗑️</button>
-            </div>
-            <button class="chatbot-close" id="chatbotClose">&times;</button>
-        </div>
-        <div class="chatbot-messages" id="chatMessages">
-            <!-- Messages will be added dynamically -->
-        </div>
-        <div class="chatbot-input-container">
-            <div class="mode-selector">
-                <label>
-                    <input type="radio" name="mode" value="fast" checked> Fast
-                </label>
-                <label>
-                    <input type="radio" name="mode" value="web"> Detailed (Web)
-                </label>
-                <label>
-                    <input type="radio" name="mode" value="ultra"> Ultra-fast
-                </label>
-            </div>
-            <div class="chat-input">
-                <input type="text" id="questionInput" placeholder="Ask a question about the selected brain region...">
-                <button id="askBtn" disabled>Ask</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Chatbot Toggle Button -->
     <button class="chatbot-toggle" id="chatbotToggle">
@@ -1898,6 +2041,7 @@
         let isWaitingForResponse = false;
 
         // DOM elements for chatbot
+        const chatbotColumn = document.getElementById('chatbotColumn');
         const chatbotContainer = document.getElementById('chatbotContainer');
         const chatbotToggle = document.getElementById('chatbotToggle');
         const chatbotClose = document.getElementById('chatbotClose');
@@ -1916,12 +2060,69 @@
 
         // Initialize chatbot event listeners
         chatbotToggle.addEventListener('click', () => {
-            chatbotContainer.classList.toggle('active');
+            const isActive = chatbotColumn.classList.contains('active');
+            if (isActive) {
+                closeChatbot();
+            } else {
+                openChatbot();
+            }
         });
 
         chatbotClose.addEventListener('click', () => {
-            chatbotContainer.classList.remove('active');
+            closeChatbot();
         });
+
+        // Handle escape key to close chatbot
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && chatbotColumn.classList.contains('active')) {
+                closeChatbot();
+            }
+        });
+
+        function openChatbot() {
+            mainContainer.classList.add('chatbot-active');
+            chatbotColumn.classList.add('active');
+            chatbotToggle.classList.add('hidden');
+            
+            // Trigger layout updates after animation completes
+            setTimeout(() => {
+                if (window.map) {
+                    window.map.updateSize();
+                }
+                // Force reflow and recalculate thumbnail grid
+                if (imagesData.length > 0) {
+                    // Force browser to recalculate layout
+                    document.querySelector('.thumbnail-panel').offsetHeight;
+                    renderImages(grid1, startIndex);
+                    updatePaginationButtons();
+                }
+            }, 450);
+            
+            // Focus on input if there's a selected region
+            if (currentBrainRegion && questionInput) {
+                setTimeout(() => questionInput.focus(), 400);
+            }
+        }
+
+        function closeChatbot() {
+            mainContainer.classList.remove('chatbot-active');
+            chatbotColumn.classList.remove('active');
+            chatbotToggle.classList.remove('hidden');
+            
+            // Trigger layout updates after animation completes
+            setTimeout(() => {
+                if (window.map) {
+                    window.map.updateSize();
+                }
+                // Force reflow and recalculate thumbnail grid
+                if (imagesData.length > 0) {
+                    // Force browser to recalculate layout
+                    document.querySelector('.thumbnail-panel').offsetHeight;
+                    renderImages(grid1, startIndex);
+                    updatePaginationButtons();
+                }
+            }, 450);
+        }
 
 
         askBtn.addEventListener('click', handleAskQuestion);
@@ -1976,7 +2177,7 @@
             if (isWaitingForResponse) return;
 
             // Show chatbot
-            chatbotContainer.classList.add('active');
+            openChatbot();
             
             // Update UI
             currentBrainRegion = regionName;
@@ -2060,7 +2261,11 @@
                         mode: mode
                     })
                 });
-                
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
                 const data = await response.json();
                 
                 // Remove loading message
@@ -2071,6 +2276,7 @@
                 } else {
                     addMessage(`Error: ${data.message}`, 'bot');
                 }
+                
             } catch (error) {
                 loadingMsg.remove();
                 addMessage(`Error: ${error.message}`, 'bot');
@@ -2084,7 +2290,39 @@
             messageDiv.className = `message ${type}-message`;
             
             const messageP = document.createElement('p');
-            messageP.textContent = text;
+            
+            // Convert markdown formatting to HTML
+            let formattedText = text
+                // PRIORITY 0: Exact problematic patterns first
+                .replace(/^(Khan Academy Academic Search|Educational & Academic Sources|Medical & Clinical Databases|Alternative Search Results):/gim, '<strong>$1:</strong>')
+                // PRIORITY 1: Specific source names (catch them before other patterns)
+                .replace(/^(Wikipedia|PubMed|Google|Bing|Yahoo|DuckDuckGo|Yandex|Khan Academy|Educational|Medical|Clinical|Academic|Scientific|Alternative|Extended|Research|University|Nature|Science|NCBI|NIH|FDA|WHO)(\s+[A-Za-z\s&]*)?(?:\s*-\s*[^:]+)?:/gim, '<strong>$1$2:</strong>')
+                // PRIORITY 2: Source - Topic format (like "Wikipedia - Cerebral cortex:")
+                .replace(/^([A-Z][A-Za-z\s&]+)\s*-\s*([^:]+):/gm, '<strong>$1 - $2:</strong>')
+                // PRIORITY 3: Any line with search/academic keywords
+                .replace(/^([A-Z][^:\n]*?(?:Search|Results?|API|Database|Sources?|Engine|Web|Site|Portal|Research|Studies|Papers|Articles|Information|Data|Repository|Archive|Library|Index|Registry|Collection|Wikipedia|PubMed|Google|Bing|Yahoo|DuckDuckGo|Yandex|Searx|Startpage|Ecosia|Nature|Science|NCBI|NIH|FDA|WHO|Medical|Clinical|Journal|University|Academic|Study|Report|Article|Paper|Publication|Summary|Overview|Definition|Findings|Analysis|Review|Investigation|Khan|Academy|Educational|Extended|Alternative)[^:\n]*?(?:\s*\([^)]*\))?)\s*:/gim, '<strong>$1:</strong>')
+                // PRIORITY 4: Multi-word headings with & (like "Educational & Academic Sources:")
+                .replace(/^([A-Z][A-Za-z\s&-]{8,})\s*:/gm, '<strong>$1:</strong>')
+                // PRIORITY 5: Catch ANY capitalized heading with parentheses
+                .replace(/^([A-Z][A-Za-z\s&-]{3,}(?:\s*\([^)]*\)))\s*:/gim, '<strong>$1:</strong>')
+                // PRIORITY 6: Simple capitalized headings (3+ words)
+                .replace(/^([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){2,}(?:\s*\([^)]*\))?)\s*:/gim, '<strong>$1:</strong>')
+                // PRIORITY 7: Any line that starts with capital and ends with colon
+                .replace(/^([A-Z][A-Za-z\s&-]{5,})\s*:\s*(?=[A-Z•])/gm, '<strong>$1:</strong>')
+                // PRIORITY 8: Common research terms
+                .replace(/^(Sources?|References?|From|Based on|According to|Research shows|Studies indicate|Key findings|Summary|Overview|Definition|Clinical significance|Anatomy|Function|Location|Connections|Role in disease|Results|Findings|Conclusion|Abstract|Introduction|Methods|Discussion|Background|Objective|Purpose|Aim|Goal|Analysis|Review|Investigation|Extended|Alternative|Academic|Scientific|Educational|Additional|Recent|Current|Latest|Updated)(?:\s+[A-Za-z\s&]*)?:/gim, '<strong>$1:</strong>')
+                // PRIORITY 9: Last resort - any reasonable heading format
+                .replace(/^([A-Z][A-Za-z\s&]{2,})\s*:/gm, '<strong>$1:</strong>')
+                // Handle bullet points: * item -> • item
+                .replace(/^\* (.*$)/gm, '• $1')
+                // Bold text: **text** -> <strong>text</strong>
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                // Underline: __text__ -> <u>text</u>
+                .replace(/__(.*?)__/g, '<u>$1</u>')
+                // Convert line breaks to <br>
+                .replace(/\n/g, '<br>');
+            
+            messageP.innerHTML = formattedText;
             
             messageDiv.appendChild(messageP);
             chatMessages.appendChild(messageDiv);

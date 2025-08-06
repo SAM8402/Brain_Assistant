@@ -69,6 +69,7 @@ def index():
     assistant.current_region = None
     return render_template('index.html')
 
+
 @app.route('/api/brain-region', methods=['POST'])
 def process_brain_region():
     """Process brain region queries"""
@@ -126,6 +127,7 @@ def process_brain_region():
             'message': error_msg,
             'chat_history': get_chat_history()
         }), 500
+
 
 @app.route('/api/ask-question', methods=['POST'])
 def ask_question():
@@ -281,7 +283,7 @@ def configure_search():
         if max_sources < 1 or max_sources > 15:
             return jsonify({
                 'success': False,
-                'message': 'max_sources must be between 1 and 15 (default: 12)'
+                'message': 'max_sources must be between 1 and 15 (default: 15)'
             }), 400
         
         # Update search configuration
@@ -303,12 +305,12 @@ def configure_search():
 def get_search_config():
     """Get current search configuration"""
     try:
-        max_sources = getattr(assistant.web_search, 'max_sources', 12) if hasattr(assistant, 'web_search') else 12
+        max_sources = getattr(assistant.web_search, 'max_sources', 15) if hasattr(assistant, 'web_search') else 15
         
         return jsonify({
             'success': True,
             'max_sources': max_sources,
-            'default_sources': 12,
+            'default_sources': 15,
             'maximum_sources': 15,
             'available_sources': [
                 'DuckDuckGo Search (Primary)',
