@@ -1376,6 +1376,63 @@ Keep it under 200 words but be informative.{context}"""
             self.add_to_conversation(question, error_response, "error")
             return error_response
 
+    def get_chat_summary(self) -> str:
+        """Generate a summary based on all previous chat history"""
+        if not self.conversation_history:
+            return "No previous conversation history available for summary."
+        
+        # Include all meaningful exchanges from conversation history
+        all_exchanges = []
+        for exchange in self.conversation_history:
+            exchange_type = exchange.get("type", "")
+            # Skip error responses and summary requests
+            if exchange_type not in ["error", "web_summary", "chat_summary"]:
+                all_exchanges.append(exchange)
+        
+        if not all_exchanges:
+            return f"No meaningful conversation history found for summary. Total history entries: {len(self.conversation_history)}"
+        
+        # Combine all conversation information
+        combined_info = []
+        current_region = None
+        
+        for exchange in all_exchanges:
+            region = exchange.get("region", "Unknown region")
+            if region != current_region:
+                current_region = region
+                combined_info.append(f"\n--- Information about {region} ---")
+            
+            user_query = exchange.get("user", "")
+            assistant_response = exchange.get("assistant", "")
+            
+            combined_info.append(f"Query: {user_query}")
+            combined_info.append(f"Response: {assistant_response}")
+            combined_info.append("---")
+        
+        # Create summary prompt
+        all_chat_content = "\n".join(combined_info)
+        summary_prompt = f"""Based on the following conversation history and all information discussed, provide a comprehensive summary:
+
+{all_chat_content}
+
+Please create a well-structured summary that:
+1. Consolidates all key information from our conversation
+2. Organizes information by topic (anatomy, function, clinical significance, etc.)
+3. Includes both web research findings and AI knowledge shared
+4. Highlights the most important facts and insights discussed
+5. Removes redundancy while preserving important details
+6. Maintains scientific accuracy
+
+Provide a clear, comprehensive summary in 300-500 words."""
+
+        try:
+            summary = self._sync_llama_request(summary_prompt)
+            # Add summary to conversation history
+            self.add_to_conversation("Generate summary from chat history", summary, "chat_summary")
+            return f"📋 **Summary of Previous Conversation:**\n\n{summary}"
+        except Exception as e:
+            return f"Error generating summary: {str(e)}"
+
 def main():
     # # Get API key
     # api_key = "AIzaSyAlEwiCemb1kpclHSyb6z7RUgqSJoHUzvI"
@@ -1393,6 +1450,7 @@ def main():
     
     print("\nCommands:")
     print("  region <name> - Get brain region info")
+    print("  summary      - Generate summary from previous chat")
     print("  quit         - Exit")
     print("="*60)
     
@@ -1409,7 +1467,28 @@ def main():
             
             command = parts[0].lower()
             
-            if command == 'region' and len(parts) > 1:
+            if command == 'summary' or command == 'debug':
+                if command == 'debug':
+                    print(f"\nDEBUG: Conversation history has {len(assistant.conversation_history)} entries:")
+                    for i, exchange in enumerate(assistant.conversation_history):
+                        print(f"{i+1}. Type: {exchange.get('type', 'unknown')}, Region: {exchange.get('region', 'none')}")
+                        print(f"   User: {exchange.get('user', '')[:50]}...")
+                        print(f"   Assistant: {exchange.get('assistant', '')[:100]}...")
+                        print()
+                    continue
+                
+                print("\nGenerating summary from previous chat...")
+                print("-" * 50)
+                summary = assistant.get_chat_summary()
+                print(summary)
+                print("\n" + "="*60)
+                print("Commands:")
+                print("  region <name> - Get brain region info")
+                print("  summary      - Generate summary from previous chat")
+                print("  quit         - Exit")
+                print("="*60)
+            
+            elif command == 'region' and len(parts) > 1:
                 region_name = " ".join(parts[1:])  # Handle multi-word regions
                 
                 # Ask for search mode after region is entered
@@ -1438,6 +1517,7 @@ def main():
                 print("\n" + "="*60)
                 print("Commands:")
                 print("  region <name> - Get brain region info")
+                print("  summary      - Generate summary from previous chat")
                 print("  quit         - Exit")
                 print("="*60)
             
@@ -1474,7 +1554,54 @@ def main():
                     print("\n" + "-" * 50)
                     print("Do you have more questions? (yes/no):")
                 else:
-                    print("Unknown command. Try: region <name> or quit")
+                    # Check if user is asking about a brain region directly
+                    user_lower = user_input.lower()
+                    if any(phrase in user_lower for phrase in ["tell me about", "what is", "describe", "explain"]):
+                        # Extract potential brain region from the question
+                        region_keywords = ["hippocampus", "amygdala", "cerebellum", "cerebellar", "cortex", "thalamus", 
+                                         "hypothalamus", "brainstem", "hemispheres", "frontal", "parietal", "temporal", 
+                                         "occipital", "insula", "corpus callosum"]
+                        
+                        found_region = None
+                        for keyword in region_keywords:
+                            if keyword in user_lower:
+                                # Extract the full region name from the original input
+                                words = user_input.split()
+                                for i, word in enumerate(words):
+                                    if keyword.lower() in word.lower():
+                                        # Try to get the full region name (might be multiple words)
+                                        if i > 0 and words[i-1].lower() in ["cerebellar", "frontal", "parietal", "temporal", "occipital"]:
+                                            found_region = f"{words[i-1]} {word}"
+                                        else:
+                                            found_region = word
+                                        break
+                                if found_region:
+                                    break
+                        
+                        if found_region:
+                            print(f"\nDetected question about: {found_region}")
+                            print("How would you like me to search?")
+                            print("1. Fast mode (concise overview)")
+                            print("2. Detailed mode (comprehensive web search)")
+                            print("3. Ultra-fast mode (key facts only)")
+                            
+                            mode_input = input("Enter choice (1/2/3, default=2): ").strip() or "2"
+                            mode_map = {"1": "fast", "2": "web", "3": "ultra"}
+                            mode = mode_map.get(mode_input, "web")
+                            
+                            print(f"\nSearching for: {found_region} (mode: {mode})")
+                            print("-" * 50)
+                            
+                            is_valid, info = assistant.get_brain_region_info(found_region, mode)
+                            print(info)
+                            
+                            if is_valid:
+                                print("\n" + "-" * 50)
+                                print(f"Do you have more questions about {found_region}? (yes/no):")
+                        else:
+                            print("I couldn't identify a specific brain region. Try: region <name> or ask more specifically")
+                    else:
+                        print("Unknown command. Try: region <name>, summary, or ask about a specific brain region")
                 
         except KeyboardInterrupt:
             break
