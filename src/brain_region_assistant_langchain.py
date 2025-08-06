@@ -6,6 +6,7 @@ import openai
 import time
 import json
 import urllib.parse
+import re
 from typing import Dict, Tuple, Any, List, Optional
 from functools import lru_cache
 from langchain.agents import Tool, initialize_agent, AgentType
