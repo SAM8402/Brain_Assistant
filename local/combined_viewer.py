@@ -2033,6 +2033,126 @@ def ask_question():
             'chat_history': get_chat_history()
         }), 500
 
+@app.route('/api/ask-question-stream', methods=['POST'])
+def ask_question_stream():
+    """Handle follow-up questions with streaming response"""
+    from flask import Response, stream_with_context
+    import json
+    
+    data = request.json
+    question = data.get('question')
+    use_web = data.get('use_web', False)
+    mode = session.get('current_mode', data.get('mode', 'fast'))
+    
+    if not question:
+        return jsonify({'success': False, 'message': 'Please provide a question'}), 400
+    
+    if not assistant.current_region:
+        return jsonify({'success': False, 'message': 'Please select a brain region first'}), 400
+    
+    # Sync conversation history before processing
+    sync_assistant_history()
+    
+    # Automatically enable web search if mode is 'web' (Detailed mode)
+    if mode == 'web':
+        use_web = True
+    
+    # Add user question to chat history
+    search_indicator = " (web search)" if use_web else ""
+    add_to_chat_history('user_query', f"{question}{search_indicator}", assistant.current_region)
+    
+    def generate():
+        try:
+            # Get streaming answer
+            full_response = ""
+            for chunk in assistant.ask_question_stream(question, use_web):
+                full_response += chunk
+                # Send each chunk as Server-Sent Event
+                yield f"data: {json.dumps({'chunk': chunk, 'success': True})}\n\n"
+            
+            # Add complete answer to chat history
+            add_to_chat_history('assistant_response', full_response, assistant.current_region)
+            
+            # Send final message with complete status
+            yield f"data: {json.dumps({'complete': True, 'success': True, 'region': assistant.current_region, 'web_search_used': use_web})}\n\n"
+            
+        except Exception as e:
+            error_msg = f'Error: {str(e)}'
+            add_to_chat_history('assistant_response', error_msg, assistant.current_region)
+            yield f"data: {json.dumps({'error': error_msg, 'success': False})}\n\n"
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
+
+@app.route('/api/brain-region-stream', methods=['POST'])
+def process_brain_region_stream():
+    """Process brain region queries with streaming response"""
+    from flask import Response, stream_with_context
+    import json
+    
+    data = request.json
+    region_name = data.get('region')
+    mode = data.get('mode', 'fast')
+    
+    if not region_name:
+        return jsonify({'success': False, 'message': 'Please provide a brain region name'}), 400
+    
+    # Sync conversation history before processing
+    sync_assistant_history()
+    
+    # Add user query to chat history
+    add_to_chat_history('user_query', f"Tell me about {region_name} (mode: {mode})", region_name)
+    
+    def generate():
+        try:
+            # First validate if it's a brain region
+            is_valid = assistant.validate_brain_region(region_name)
+            
+            if not is_valid:
+                error_msg = f"'{region_name}' is not a brain region. Please enter a valid brain region name."
+                yield f"data: {json.dumps({'chunk': error_msg, 'success': False})}\n\n"
+                yield f"data: {json.dumps({'complete': True, 'success': False})}\n\n"
+                return
+            
+            # Store current region and mode
+            assistant.current_region = region_name
+            session['current_mode'] = mode
+            session.modified = True
+            
+            # Get streaming info
+            full_response = ""
+            for chunk in assistant.get_brain_region_info_stream(region_name, mode):
+                full_response += chunk
+                yield f"data: {json.dumps({'chunk': chunk, 'success': True})}\n\n"
+            
+            # Add complete response to chat history
+            add_to_chat_history('region_info', full_response, region_name)
+            
+            # Send final message
+            yield f"data: {json.dumps({'complete': True, 'success': True, 'region': region_name, 'mode': mode})}\n\n"
+            
+        except Exception as e:
+            error_msg = f'Error: {str(e)}'
+            add_to_chat_history('assistant_response', error_msg, region_name)
+            yield f"data: {json.dumps({'error': error_msg, 'success': False})}\n\n"
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
+
 @app.route('/api/validate-region', methods=['POST'])
 def validate_region():
     """Validate if input is a brain region"""

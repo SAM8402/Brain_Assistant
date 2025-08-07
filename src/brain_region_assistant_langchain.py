@@ -1863,6 +1863,23 @@ class UltraFastBrainAssistant:
         except Exception as e:
             return f"Error: {str(e)}"
     
+    def _stream_llama_request(self, prompt: str):
+        """Streaming request using local Llama"""
+        try:
+            messages = [{"role": "user", "content": prompt}]
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=0,
+                max_tokens=512,
+                stream=True
+            )
+            for chunk in completion:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            yield f"Error: {str(e)}"
+    
     def validate_brain_region(self, region_name: str) -> bool:
         """Check if the input is a valid brain region"""
         
@@ -2020,6 +2037,134 @@ Keep it under 200 words but be informative.{context}"""
             self.add_to_conversation(question, error_response, "error")
             return error_response
 
+    def ask_question_stream(self, question: str, use_web: bool = False):
+        """Ask questions with streaming response"""
+        if not self.current_region:
+            yield "Please specify a brain region first using 'region <name>'"
+            return
+        
+        try:
+            # Get conversation context for continuity
+            context = self.get_conversation_context(4)  # Get last 4 exchanges
+            
+            if use_web and self.use_web_search:
+                query = f"Answer this specific question about the {self.current_region} brain region: {question}{context}"
+                try:
+                    # For web search, we'll have to get the full response and stream it
+                    response = self.web_search.search(query, self.llm)
+                    # Stream the response in chunks
+                    chunk_size = 50  # characters per chunk
+                    for i in range(0, len(response), chunk_size):
+                        yield response[i:i+chunk_size]
+                        time.sleep(0.01)  # Small delay to simulate streaming
+                    # Add to conversation history
+                    self.add_to_conversation(question, response, "web_question")
+                except Exception as e:
+                    # Fallback to streaming AI if web search fails
+                    prompt = f"About the {self.current_region} brain region, answer this question: {question}{context}"
+                    yield "Web search unavailable, using AI knowledge: "
+                    full_response = "Web search unavailable, using AI knowledge: "
+                    for chunk in self._stream_llama_request(prompt):
+                        yield chunk
+                        full_response += chunk
+                    self.add_to_conversation(question, full_response, "fallback_question")
+            else:
+                prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
+                full_response = ""
+                for chunk in self._stream_llama_request(prompt):
+                    yield chunk
+                    full_response += chunk
+                # Add to conversation history
+                self.add_to_conversation(question, full_response, "fast_question")
+        except Exception as e:
+            error_response = f"Error: {str(e)}"
+            yield error_response
+            self.add_to_conversation(question, error_response, "error")
+    
+    def get_brain_region_info_stream(self, region_name: str, mode: str = "fast"):
+        """Get brain region info with streaming response"""
+        self.current_region = region_name
+        self.current_mode = mode
+        
+        # Check cache first
+        cache_key = f"{region_name.lower()}_{mode}"
+        if cache_key in self.region_cache:
+            cached_response = f"📋 (Cached)\n{self.region_cache[cache_key]}"
+            # Stream cached response
+            chunk_size = 50
+            for i in range(0, len(cached_response), chunk_size):
+                yield cached_response[i:i+chunk_size]
+                time.sleep(0.01)
+            return
+        
+        try:
+            if mode == "web" and self.use_web_search:
+                # Web search mode - get full response and stream it
+                context = self.get_conversation_context(3)
+                query = f"Provide comprehensive information about the {region_name} brain region: anatomy, functions, neural connections, and clinical significance. Include recent research findings if available.{context}"
+                
+                # Force at least 15 sources for web mode
+                original_max = self.web_search.max_sources
+                self.web_search.max_sources = max(15, original_max)
+                
+                # Get web search response
+                info = self.web_search.search(query, self.llm)
+                
+                # Restore original max sources
+                self.web_search.max_sources = original_max
+                
+                # Ensure we have valid content
+                if not info or len(info.strip()) < 100:
+                    prompt = f"Provide comprehensive information about {region_name} including anatomy, function, connections, and clinical significance."
+                    for chunk in self._stream_llama_request(prompt):
+                        yield chunk
+                        info += chunk
+                else:
+                    # Stream the web search response
+                    chunk_size = 50
+                    for i in range(0, len(info), chunk_size):
+                        yield info[i:i+chunk_size]
+                        time.sleep(0.01)
+                
+            elif mode == "ultra":
+                # Ultra-fast mode with streaming
+                prompt = f"""List key facts about {region_name} brain region:
+• Location and main divisions
+• Primary functions (2-3 bullet points)
+• Major connections (inputs/outputs)
+• Clinical relevance (1-2 key points)"""
+                
+                full_response = ""
+                for chunk in self._stream_llama_request(prompt):
+                    yield chunk
+                    full_response += chunk
+                info = full_response
+                
+            else:  # fast mode
+                prompt = f"""Provide information about {region_name} brain region:
+- Anatomical location and structure
+- Primary functions and roles
+- Key neural pathways and connections
+- Clinical significance and associated disorders
+Keep response focused yet informative."""
+                
+                full_response = ""
+                for chunk in self._stream_llama_request(prompt):
+                    yield chunk
+                    full_response += chunk
+                info = full_response
+            
+            # Cache the complete response
+            self.region_cache[cache_key] = info
+            
+            # Add to conversation history
+            self.add_to_conversation(f"Tell me about {region_name}", info, "region_info")
+            
+        except Exception as e:
+            error_msg = f"Error getting information: {str(e)}"
+            yield error_msg
+            self.add_to_conversation(f"Tell me about {region_name}", error_msg, "error")
+    
     def get_search_stats(self) -> Dict[str, Any]:
         """Get comprehensive search and performance statistics"""
         stats = {
