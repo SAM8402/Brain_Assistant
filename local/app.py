@@ -1927,6 +1927,19 @@ def process_brain_region():
         region_name = data.get('region')
         mode = data.get('mode', 'fast')  # fast, web, or ultra
         
+        # Input validation
+        if not isinstance(region_name, str) or len(region_name.strip()) == 0:
+            return jsonify({
+                'success': False,
+                'message': 'Please provide a valid brain region name'
+            }), 400
+        
+        region_name = region_name.strip()
+        
+        # Validate mode
+        if mode not in ['fast', 'web', 'ultra']:
+            mode = 'fast'
+        
         if not region_name:
             return jsonify({
                 'success': False,
@@ -1986,6 +1999,15 @@ def ask_question():
         use_web = data.get('use_web', False)
         # Use stored mode from session, fallback to provided mode or 'fast'
         mode = session.get('current_mode', data.get('mode', 'fast'))
+        
+        # Input validation
+        if not isinstance(question, str) or len(question.strip()) == 0:
+            return jsonify({
+                'success': False,
+                'message': 'Please provide a valid question'
+            }), 400
+        
+        question = question.strip()
         
         if not question:
             return jsonify({
@@ -2160,6 +2182,16 @@ def validate_region():
         data = request.json
         region_name = data.get('region')
         
+        # Input validation
+        if not isinstance(region_name, str) or len(region_name.strip()) == 0:
+            return jsonify({
+                'success': False,
+                'is_valid': False,
+                'message': 'Please provide a valid region name'
+            }), 400
+        
+        region_name = region_name.strip()
+        
         if not region_name:
             return jsonify({
                 'success': False,
@@ -2220,10 +2252,10 @@ def configure_search():
         data = request.json
         max_sources = data.get('max_sources', 12)
         
-        if max_sources < 1 or max_sources > 15:
+        if max_sources < 1 or max_sources > 20:
             return jsonify({
                 'success': False,
-                'message': 'max_sources must be between 1 and 15'
+                'message': 'max_sources must be between 1 and 20'
             }), 400
         
         # Update search configuration
@@ -2235,6 +2267,28 @@ def configure_search():
             'max_sources': max_sources
         })
         
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/performance-stats', methods=['GET'])
+def get_performance_stats():
+    """Get performance statistics"""
+    try:
+        # Get stats if available in improved version
+        if hasattr(assistant, 'get_performance_stats'):
+            stats = assistant.get_performance_stats()
+            return jsonify({
+                'success': True,
+                'stats': stats
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Performance stats not available in current version'
+            })
     except Exception as e:
         return jsonify({
             'success': False,
