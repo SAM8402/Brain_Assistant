@@ -1,4 +1,6 @@
 *.txt
 __pycache__
-*.md
+# *.md
 test*
+get_thumbnails
+light_weight_viewer
