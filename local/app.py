@@ -1771,13 +1771,13 @@ def get_thumbnail_viewer(biosample, series_type, session_id, roi_section=1):
 def index():
     # Read and return the combined template
     try:
-        with open('/home/users/imran/brain_assistant/local/combined_viewer.html', 'r') as file:
+        with open('/home/users/imran/brain_assistant/local/templates/index.html', 'r') as file:
             template = file.read()
         return template
     except FileNotFoundError:
         return '''
         <h1>Combined Brain Viewer</h1>
-        <p>Error: combined_viewer.html template not found!</p>
+        <p>Error: index.html template not found!</p>
         <ul>
             <li><a href="/light_weight_viewer">Light Weight Viewer</a></li>
             <li><a href="/thumbnail_viewer">Thumbnail Viewer</a></li>
@@ -1788,7 +1788,7 @@ def index():
 @app.route('/combined/<int:biosample>/<int:section>/<series_type>')
 def combined_viewer(biosample=222, section=1000, series_type='NISSL'):
     try:
-        with open('/home/users/imran/brain_assistant/local/combined_viewer.html', 'r') as file:
+        with open('/home/users/imran/brain_assistant/local/templates/index.html', 'r') as file:
             template = file.read()
         
         # Replace dynamic values in the template
