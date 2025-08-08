@@ -53,6 +53,8 @@
             top: 0;
             right: 0;
             width: 400px;
+            min-width: 300px;
+            max-width: 800px;
             height: 100%;
             background: rgba(15, 15, 15, 0.95);
             backdrop-filter: blur(20px);
@@ -67,9 +69,44 @@
             will-change: transform;
         }
 
+        /* Resize handle for chatbot */
+        .chatbot-resize-handle {
+            position: absolute;
+            left: -6px;
+            top: 0;
+            width: 12px;
+            height: 100%;
+            cursor: col-resize;
+            z-index: 10001;
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+
+        .chatbot-resize-handle::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 60px;
+            background: rgba(99, 102, 241, 0.6);
+            border-radius: 2px;
+            opacity: 0;
+            transition: all 0.2s ease;
+        }
+
+        .chatbot-resize-handle:hover::after,
+        .chatbot-column.resizing .chatbot-resize-handle::after {
+            opacity: 1;
+            background: rgba(99, 102, 241, 0.9);
+            width: 6px;
+            height: 80px;
+        }
+
         /* When chatbot is active, shrink the viewers and show chatbot */
         .main-container.chatbot-active .viewers-column {
-            width: calc(100% - 400px);
+            width: calc(100% - var(--chatbot-width, 400px));
         }
 
         .chatbot-column.active {
@@ -80,6 +117,18 @@
         .chatbot-column.active .chatbot-container {
             opacity: 1;
             transform: translateY(0);
+        }
+
+        /* Disable text selection while resizing */
+        body.chatbot-resizing {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+
+        body.chatbot-resizing * {
+            cursor: col-resize !important;
         }
         
         @media (max-width: 768px) {
@@ -123,29 +172,14 @@
             }
         }
         
-        @media (min-width: 769px) and (max-width: 1200px) {
+        @media (min-width: 769px) {
+            /* Desktop: Use flexible width with resize handle */
             .chatbot-column {
-                width: 350px;
-            }
-        }
-        
-        @media (min-width: 1201px) {
-            .chatbot-column {
-                width: 450px;
+                width: var(--chatbot-width, 400px);
             }
             
             .main-container.chatbot-active .viewers-column {
-                width: calc(100% - 450px);
-            }
-        }
-        
-        @media (min-width: 769px) and (max-width: 1200px) {
-            .chatbot-column {
-                width: 350px;
-            }
-            
-            .main-container.chatbot-active .viewers-column {
-                width: calc(100% - 350px);
+                width: calc(100% - var(--chatbot-width, 400px));
             }
         }
 
@@ -1664,6 +1698,8 @@
 
         <!-- Right column: Chatbot -->
         <div class="chatbot-column" id="chatbotColumn">
+            <!-- Resize Handle -->
+            <div class="chatbot-resize-handle" id="chatbotResizeHandle"></div>
             <!-- Chatbot Container -->
             <div class="chatbot-container" id="chatbotContainer">
                 <div class="chatbot-header">
@@ -1776,6 +1812,58 @@
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+            }
+        });
+
+        // ==================== Chatbot Resize Functionality ====================
+        let isChatbotResizing = false;
+        let chatbotWidth = 400; // Default width
+        const chatbotColumn = document.getElementById('chatbotColumn');
+        const chatbotResizeHandle = document.getElementById('chatbotResizeHandle');
+        const viewersColumn = document.querySelector('.viewers-column');
+
+        // Load saved chatbot width from localStorage
+        const savedWidth = localStorage.getItem('chatbotWidth');
+        if (savedWidth) {
+            chatbotWidth = parseInt(savedWidth);
+            updateChatbotWidth(chatbotWidth);
+        }
+
+        function updateChatbotWidth(width) {
+            chatbotColumn.style.width = width + 'px';
+            document.documentElement.style.setProperty('--chatbot-width', width + 'px');
+            // Save to localStorage
+            localStorage.setItem('chatbotWidth', width.toString());
+        }
+
+        chatbotResizeHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isChatbotResizing = true;
+            document.body.classList.add('chatbot-resizing');
+            chatbotColumn.classList.add('resizing');
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isChatbotResizing) return;
+            
+            const windowWidth = window.innerWidth;
+            const newWidth = windowWidth - e.clientX;
+            
+            // Constrain width between 300px and 800px, and not more than 70% of window width
+            const minWidth = 300;
+            const maxWidth = Math.min(800, windowWidth * 0.7);
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                chatbotWidth = newWidth;
+                updateChatbotWidth(chatbotWidth);
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isChatbotResizing) {
+                isChatbotResizing = false;
+                document.body.classList.remove('chatbot-resizing');
+                chatbotColumn.classList.remove('resizing');
             }
         });
 
@@ -2726,7 +2814,7 @@
         let isWaitingForResponse = false;
 
         // DOM elements for chatbot
-        const chatbotColumn = document.getElementById('chatbotColumn');
+        // chatbotColumn already declared in resize section above
         const chatbotContainer = document.getElementById('chatbotContainer');
         const chatbotToggle = document.getElementById('chatbotToggle');
         const chatbotClose = document.getElementById('chatbotClose');
