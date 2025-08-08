@@ -1848,6 +1848,82 @@ class UltraFastBrainAssistant:
     #     except Exception as e:
     #         return f"Error: {str(e)}"
     
+    def _generate_summary(self, content: str) -> str:
+        """Generate a 5-point summary of the given content"""
+        try:
+            summary_prompt = f"""Based on the following content about brain regions, create exactly 5 key summary points. Format as:
+
+**🔑 Key Summary:**
+1. [First key point]
+2. [Second key point] 
+3. [Third key point]
+4. [Fourth key point]
+5. [Fifth key point]
+
+Content to summarize:
+{content}
+
+Provide only the 5 numbered summary points, nothing else."""
+
+            messages = [{"role": "user", "content": summary_prompt}]
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=0,
+                max_tokens=256,
+                stream=False
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            return f"""**🔑 Key Summary:**
+1. Information provided about the requested brain region
+2. Anatomical location and structural details covered
+3. Functional roles and responsibilities explained
+4. Neural connections and pathways described
+5. Clinical significance and related conditions mentioned"""
+
+    def _generate_summary_stream(self, content: str):
+        """Generate a 5-point summary with streaming output"""
+        try:
+            summary_prompt = f"""Based on the following content about brain regions, create exactly 5 key summary points. Format as:
+
+**🔑 Key Summary:**
+1. [First key point]
+2. [Second key point] 
+3. [Third key point]
+4. [Fourth key point]
+5. [Fifth key point]
+
+Content to summarize:
+{content}
+
+Provide only the 5 numbered summary points, nothing else."""
+
+            messages = [{"role": "user", "content": summary_prompt}]
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=0,
+                max_tokens=256,
+                stream=True
+            )
+            for chunk in completion:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            fallback_summary = f"""**🔑 Key Summary:**
+1. Information provided about the requested brain region
+2. Anatomical location and structural details covered
+3. Functional roles and responsibilities explained
+4. Neural connections and pathways described
+5. Clinical significance and related conditions mentioned"""
+            
+            # Stream the fallback summary in chunks
+            chunk_size = 20
+            for i in range(0, len(fallback_summary), chunk_size):
+                yield fallback_summary[i:i+chunk_size]
+                time.sleep(0.01)
+
     def _sync_llama_request(self, prompt: str) -> str:
         """Synchronous request using local Llama"""
         try:
@@ -1989,14 +2065,20 @@ Keep it under 200 words but be informative.{context}"""
             
             # Cache the result and add to conversation
             if info and info != "Error" and not info.startswith("Error"):
-                self.region_cache[cache_key] = info
+                # Generate 5-point summary
+                summary = self._generate_summary(info)
+                
+                # Combine main content with summary
+                full_response = f"{info}\n\n{summary}"
+                
+                self.region_cache[cache_key] = full_response
                 # Add to conversation history
                 self.add_to_conversation(
                     f"Tell me about {region_name} (mode: {mode})",
-                    info,
+                    full_response,
                     "region_info"
                 )
-                return (True, info)
+                return (True, full_response)
             else:
                 return (False, "Failed to retrieve information")
                 
@@ -2017,21 +2099,32 @@ Keep it under 200 words but be informative.{context}"""
                 try:
                     # Use direct web search for questions to avoid agent complexity
                     response = self.web_search.search(query, self.llm)
+                    # Generate 5-point summary
+                    summary = self._generate_summary(response)
+                    # Combine response with summary
+                    full_response = f"{response}\n\n{summary}"
                     # Add to conversation history
-                    self.add_to_conversation(question, response, "web_question")
-                    return response
+                    self.add_to_conversation(question, full_response, "web_question")
+                    return full_response
                 except Exception as e:
                     # Fallback to direct AI if web search fails
                     prompt = f"About the {self.current_region} brain region, answer this question: {question}{context}"
-                    response = f"Web search unavailable, using AI knowledge: {self._sync_llama_request(prompt)}"
-                    self.add_to_conversation(question, response, "fallback_question")
-                    return response
+                    ai_response = self._sync_llama_request(prompt)
+                    response = f"Web search unavailable, using AI knowledge: {ai_response}"
+                    # Generate 5-point summary
+                    summary = self._generate_summary(response)
+                    full_response = f"{response}\n\n{summary}"
+                    self.add_to_conversation(question, full_response, "fallback_question")
+                    return full_response
             else:
                 prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
                 response = self._sync_llama_request(prompt)
+                # Generate 5-point summary
+                summary = self._generate_summary(response)
+                full_response = f"{response}\n\n{summary}"
                 # Add to conversation history
-                self.add_to_conversation(question, response, "fast_question")
-                return response
+                self.add_to_conversation(question, full_response, "fast_question")
+                return full_response
         except Exception as e:
             error_response = f"Error: {str(e)}"
             self.add_to_conversation(question, error_response, "error")
@@ -2057,24 +2150,52 @@ Keep it under 200 words but be informative.{context}"""
                     for i in range(0, len(response), chunk_size):
                         yield response[i:i+chunk_size]
                         time.sleep(0.01)  # Small delay to simulate streaming
-                    # Add to conversation history
-                    self.add_to_conversation(question, response, "web_question")
+                    
+                    # Generate and stream the summary
+                    yield "\n\n"
+                    summary_content = ""
+                    for chunk in self._generate_summary_stream(response):
+                        yield chunk
+                        summary_content += chunk
+                    
+                    # Add complete response to conversation history
+                    full_response = f"{response}\n\n{summary_content}"
+                    self.add_to_conversation(question, full_response, "web_question")
                 except Exception as e:
                     # Fallback to streaming AI if web search fails
                     prompt = f"About the {self.current_region} brain region, answer this question: {question}{context}"
                     yield "Web search unavailable, using AI knowledge: "
-                    full_response = "Web search unavailable, using AI knowledge: "
+                    ai_response = ""
                     for chunk in self._stream_llama_request(prompt):
                         yield chunk
-                        full_response += chunk
+                        ai_response += chunk
+                    
+                    # Generate and stream summary for fallback
+                    full_ai_response = f"Web search unavailable, using AI knowledge: {ai_response}"
+                    yield "\n\n"
+                    summary_content = ""
+                    for chunk in self._generate_summary_stream(full_ai_response):
+                        yield chunk
+                        summary_content += chunk
+                    
+                    full_response = f"{full_ai_response}\n\n{summary_content}"
                     self.add_to_conversation(question, full_response, "fallback_question")
             else:
                 prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
-                full_response = ""
+                main_response = ""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk
-                    full_response += chunk
-                # Add to conversation history
+                    main_response += chunk
+                
+                # Generate and stream summary for fast mode
+                yield "\n\n"
+                summary_content = ""
+                for chunk in self._generate_summary_stream(main_response):
+                    yield chunk
+                    summary_content += chunk
+                
+                # Add complete response to conversation history
+                full_response = f"{main_response}\n\n{summary_content}"
                 self.add_to_conversation(question, full_response, "fast_question")
         except Exception as e:
             error_response = f"Error: {str(e)}"
@@ -2126,6 +2247,16 @@ Keep it under 200 words but be informative.{context}"""
                         yield info[i:i+chunk_size]
                         time.sleep(0.01)
                 
+                # Generate and stream summary for web mode
+                yield "\n\n"
+                summary_content = ""
+                for chunk in self._generate_summary_stream(info):
+                    yield chunk
+                    summary_content += chunk
+                
+                # Update info to include summary
+                info = f"{info}\n\n{summary_content}"
+                
             elif mode == "ultra":
                 # Ultra-fast mode with streaming
                 prompt = f"""List key facts about {region_name} brain region:
@@ -2138,7 +2269,15 @@ Keep it under 200 words but be informative.{context}"""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk
                     full_response += chunk
-                info = full_response
+                
+                # Generate and stream summary for ultra mode
+                yield "\n\n"
+                summary_content = ""
+                for chunk in self._generate_summary_stream(full_response):
+                    yield chunk
+                    summary_content += chunk
+                
+                info = f"{full_response}\n\n{summary_content}"
                 
             else:  # fast mode
                 prompt = f"""Provide information about {region_name} brain region:
@@ -2152,7 +2291,15 @@ Keep response focused yet informative."""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk
                     full_response += chunk
-                info = full_response
+                
+                # Generate and stream summary for fast mode
+                yield "\n\n"
+                summary_content = ""
+                for chunk in self._generate_summary_stream(full_response):
+                    yield chunk
+                    summary_content += chunk
+                
+                info = f"{full_response}\n\n{summary_content}"
             
             # Cache the complete response
             self.region_cache[cache_key] = info
