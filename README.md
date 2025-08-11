@@ -2,6 +2,8 @@
 
 A comprehensive brain atlas viewer with AI-powered assistant that provides interactive brain exploration, streaming responses, and 5-point summaries.
 
+![Brain Assistant Screenshot](./Screenshot_11-8-2025_142944_dgx3.humanbrain.in.jpeg)
+
 ## 🧠 Overview
 
 This application combines a sophisticated brain atlas viewer with an advanced AI-powered chatbot assistant to provide an immersive brain exploration experience. Users can view brain sections, interact with anatomical regions, and get detailed information with streaming 5-point summaries through natural language conversations.
