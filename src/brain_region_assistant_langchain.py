@@ -7,8 +7,8 @@ import time
 import json
 import urllib.parse
 import re
-from typing import Dict, Tuple, Any, List, Optional, Union
-from functools import lru_cache, wraps
+from typing import Dict, Tuple, Any, List, Optional
+from functools import lru_cache
 from langchain.agents import Tool, initialize_agent, AgentType
 try:
     from langchain_community.tools import DuckDuckGoSearchRun
@@ -20,54 +20,34 @@ from datetime import datetime, timedelta
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
-import logging
-from contextlib import contextmanager
-import traceback
-from dataclasses import dataclass, field
-from enum import Enum
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 
 class QueryAnalyzer:
     """Analyze queries to determine optimal search strategy"""
     
-    def __init__(self):
-        self.query_patterns = {
-            'recent_research': [
-                'recent', 'latest', 'new', 'current', '2024', '2025', 'today',
-                'breakthrough', 'discovery', 'advance', 'update', 'novel'
-            ],
-            'clinical': [
-                'clinical', 'treatment', 'therapy', 'patient', 'disorder',
-                'disease', 'syndrome', 'symptom', 'diagnosis', 'medical',
-                'therapeutic', 'intervention', 'medication', 'drug'
-            ],
-            'anatomical': [
-                'anatomy', 'structure', 'location', 'parts', 'components',
-                'morphology', 'architecture', 'organization', 'layers',
-                'subdivisions', 'boundaries', 'regions'
-            ],
-            'functional': [
-                'function', 'role', 'purpose', 'what does', 'responsible for',
-                'activity', 'process', 'mechanism', 'operation', 'task'
-            ],
-            'connectivity': [
-                'pathway', 'connection', 'network', 'circuit', 'projection',
-                'fiber', 'tract', 'communication', 'signal', 'synapse'
-            ],
-            'developmental': [
-                'develop', 'embryo', 'formation', 'growth', 'maturation',
-                'evolution', 'origin', 'differentiation', 'neurogenesis'
-            ]
-        }
+    @staticmethod
+    def analyze_query(query: str) -> Dict[str, Any]:
+        """Analyze query to determine type and optimal strategy"""
+        query_lower = query.lower()
         
-        self.priority_sources = {
+        # Determine query type
+        query_type = 'general'
+        
+        if any(term in query_lower for term in ['recent', 'latest', 'new', 'current', '2024', '2025']):
+            query_type = 'recent_research'
+        elif any(term in query_lower for term in ['clinical', 'treatment', 'therapy', 'patient', 'disorder']):
+            query_type = 'clinical'
+        elif any(term in query_lower for term in ['anatomy', 'structure', 'location', 'parts', 'components']):
+            query_type = 'anatomical'
+        elif any(term in query_lower for term in ['function', 'role', 'purpose', 'what does', 'responsible for']):
+            query_type = 'functional'
+        elif any(term in query_lower for term in ['pathway', 'connection', 'network', 'circuit', 'projection']):
+            query_type = 'connectivity'
+        elif any(term in query_lower for term in ['develop', 'embryo', 'formation', 'growth', 'maturation']):
+            query_type = 'developmental'
+        
+        # Determine priority sources based on query type
+        priority_sources = {
             'recent_research': ['PubMed', 'PubMed extended', 'Enhanced web search'],
             'clinical': ['PubMed', 'Medical databases', 'Enhanced web search'],
             'anatomical': ['Wikipedia', 'Educational sources', 'Medical databases'],
@@ -76,124 +56,38 @@ class QueryAnalyzer:
             'developmental': ['PubMed', 'Educational sources', 'Wikipedia'],
             'general': ['Wikipedia', 'Enhanced web search', 'Educational sources']
         }
-    
-    def analyze_query(self, query: str) -> Dict[str, Any]:
-        """Enhanced query analysis with improved classification"""
-        query_lower = query.lower()
         
-        # Calculate scores for each query type
-        type_scores = {}
-        for query_type, patterns in self.query_patterns.items():
-            score = sum(1 for pattern in patterns if pattern in query_lower)
-            type_scores[query_type] = score
-        
-        # Determine primary query type
-        max_score = max(type_scores.values()) if type_scores else 0
-        if max_score > 0:
-            query_type = max(type_scores, key=type_scores.get)
-        else:
-            query_type = 'general'
-        
-        # Assess complexity
-        complexity = self._assess_complexity(query)
-        
-        # Extract entities
-        entities = self._extract_entities(query)
-        
-        # Determine search parameters
-        recommended_sources = self._calculate_recommended_sources(complexity)
-        cache_ttl = self._calculate_cache_ttl(query_type)
+        # Determine search depth
+        complexity = QueryAnalyzer._assess_complexity(query)
         
         return {
             'type': query_type,
-            'priority_sources': self.priority_sources.get(query_type, self.priority_sources['general']),
+            'priority_sources': priority_sources.get(query_type, priority_sources['general']),
             'complexity': complexity,
-            'recommended_sources': recommended_sources,
-            'cache_ttl': cache_ttl,
-            'entities': entities,
-            'type_scores': type_scores
+            'recommended_sources': 15 if complexity == 'high' else 12 if complexity == 'medium' else 8,
+            'cache_ttl': 60 if 'recent' in query_type else 180
         }
     
-    def _assess_complexity(self, query: str) -> str:
-        """Enhanced complexity assessment"""
+    @staticmethod
+    def _assess_complexity(query: str) -> str:
+        """Assess query complexity"""
         word_count = len(query.split())
         
+        # Check for complex terms
         complex_indicators = [
             'mechanism', 'pathway', 'interaction', 'relationship',
             'compare', 'contrast', 'difference', 'similarity',
-            'comprehensive', 'detailed', 'thorough', 'explain',
-            'multiple', 'various', 'several', 'complex'
+            'comprehensive', 'detailed', 'thorough', 'explain'
         ]
         
         complex_count = sum(1 for term in complex_indicators if term in query.lower())
         
-        # Check for compound queries
-        compound_indicators = ['and', 'or', 'with', 'including', 'as well as']
-        compound_count = sum(1 for indicator in compound_indicators if indicator in query.lower())
-        
-        # Calculate complexity score
-        complexity_score = (word_count / 5) + (complex_count * 2) + (compound_count * 1.5)
-        
-        if complexity_score > 10:
+        if word_count > 20 or complex_count > 2:
             return 'high'
-        elif complexity_score > 5:
+        elif word_count > 10 or complex_count > 0:
             return 'medium'
         else:
             return 'low'
-    
-    def _extract_entities(self, query: str) -> Dict[str, List[str]]:
-        """Extract brain regions and other entities from query"""
-        entities = {
-            'brain_regions': [],
-            'conditions': [],
-            'techniques': []
-        }
-        
-        # Common brain regions
-        brain_regions = [
-            'hippocampus', 'amygdala', 'cortex', 'cerebellum', 'thalamus',
-            'hypothalamus', 'brainstem', 'basal ganglia', 'corpus callosum',
-            'prefrontal', 'temporal', 'parietal', 'occipital', 'frontal'
-        ]
-        
-        # Common conditions
-        conditions = [
-            'alzheimer', 'parkinson', 'epilepsy', 'stroke', 'tumor',
-            'schizophrenia', 'depression', 'anxiety', 'autism', 'adhd'
-        ]
-        
-        # Common techniques
-        techniques = [
-            'fmri', 'mri', 'pet', 'eeg', 'meg', 'optogenetics',
-            'electrophysiology', 'imaging', 'stimulation'
-        ]
-        
-        query_lower = query.lower()
-        
-        # Extract entities
-        entities['brain_regions'] = [br for br in brain_regions if br in query_lower]
-        entities['conditions'] = [c for c in conditions if c in query_lower]
-        entities['techniques'] = [t for t in techniques if t in query_lower]
-        
-        return entities
-    
-    def _calculate_recommended_sources(self, complexity: str) -> int:
-        """Calculate recommended number of sources based on complexity"""
-        source_map = {
-            'high': 15,
-            'medium': 12,
-            'low': 8
-        }
-        return source_map.get(complexity, 10)
-    
-    def _calculate_cache_ttl(self, query_type: str) -> int:
-        """Calculate cache TTL based on query type"""
-        if query_type == 'recent_research':
-            return 60  # 1 minute for recent research
-        elif query_type in ['clinical', 'developmental']:
-            return 120  # 2 minutes for clinical/developmental
-        else:
-            return 180  # 3 minutes for general queries
 
 
 class ErrorHandler:
@@ -201,7 +95,7 @@ class ErrorHandler:
     
     def __init__(self):
         self.error_log = []
-        self.max_log_size = 1000
+        self.max_log_size = 100
         self.recovery_strategies = {
             'timeout': self._handle_timeout,
             'rate_limit': self._handle_rate_limit,
@@ -384,15 +278,12 @@ class ResponseQualityScorer:
 class AdvancedCache:
     """Advanced caching system with TTL, size limits, and smart invalidation"""
     
-    def __init__(self, default_ttl_minutes: int = 60, max_size: int = 200):
+    def __init__(self, default_ttl_minutes: int = 60, max_size: int = 100):
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.default_ttl = timedelta(minutes=default_ttl_minutes)
         self.max_size = max_size
         self.access_count: Dict[str, int] = {}
-        self.access_times: Dict[str, datetime] = {}
         self.lock = threading.Lock()
-        self.hit_count = 0
-        self.miss_count = 0
     
     def _generate_key(self, region: str, mode: str, query: str = "") -> str:
         """Generate a unique cache key"""
@@ -407,17 +298,12 @@ class AdvancedCache:
                 if datetime.now() < entry['expires_at']:
                     # Update access count for LRU
                     self.access_count[key] = self.access_count.get(key, 0) + 1
-                    self.access_times[key] = datetime.now()
-                    self.hit_count += 1
                     return entry['value']
                 else:
                     # Remove expired entry
                     del self.cache[key]
                     if key in self.access_count:
                         del self.access_count[key]
-                    if key in self.access_times:
-                        del self.access_times[key]
-        self.miss_count += 1
         return None
     
     def set(self, key: str, value: Any, ttl_minutes: Optional[int] = None):
@@ -440,31 +326,10 @@ class AdvancedCache:
         if not self.cache:
             return
         
-        # Find least accessed key based on access time
-        if self.access_times:
-            lru_key = min(self.access_times.keys(), key=lambda k: self.access_times.get(k, datetime.min))
-        else:
-            lru_key = min(self.access_count.keys(), key=lambda k: self.access_count.get(k, 0))
-            
+        # Find least accessed key
+        lru_key = min(self.access_count.keys(), key=lambda k: self.access_count.get(k, 0))
         del self.cache[lru_key]
-        if lru_key in self.access_count:
-            del self.access_count[lru_key]
-        if lru_key in self.access_times:
-            del self.access_times[lru_key]
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
-        total_requests = self.hit_count + self.miss_count
-        hit_rate = self.hit_count / total_requests if total_requests > 0 else 0
-        
-        return {
-            'size': len(self.cache),
-            'hit_count': self.hit_count,
-            'miss_count': self.miss_count,
-            'hit_rate': hit_rate,
-            'total_requests': total_requests,
-            'max_size': self.max_size
-        }
+        del self.access_count[lru_key]
     
     def clear_expired(self):
         """Remove all expired entries"""
@@ -587,9 +452,6 @@ class ImprovedWebSearchTool:
         
         # Initialize advanced cache
         self.cache = AdvancedCache(default_ttl_minutes=120, max_size=200)
-        
-        # Initialize query analyzer
-        self.query_analyzer = QueryAnalyzer()
         
         # Initialize error handler
         self.error_handler = ErrorHandler()
@@ -1622,7 +1484,7 @@ class ImprovedWebSearchTool:
     def search(self, query: str, llm=None) -> str:
         """Main search function with adaptive strategy, parallel execution and caching"""
         # Analyze query for optimal strategy
-        query_analysis = self.query_analyzer.analyze_query(query)
+        query_analysis = QueryAnalyzer.analyze_query(query)
         print(f"🔍 Query Analysis: Type={query_analysis['type']}, Complexity={query_analysis['complexity']}")
         
         # Check cache first
@@ -1784,7 +1646,8 @@ class ImprovedWebSearchTool:
 
 class UltraFastBrainAssistant:
     def __init__(self, use_web_search: bool = True):
-        # Initialize OpenAI client
+        # self.api_key = api_key
+        # self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self.client = openai.OpenAI(
             base_url="http://dgx5.humanbrain.in:8999/v1",
             api_key="dummy"
@@ -1794,25 +1657,10 @@ class UltraFastBrainAssistant:
         self.region_cache: Dict[str, str] = {}
         self.use_web_search = use_web_search
         
-        # Enhanced conversation memory
+        # Add conversation memory
         self.conversation_history: List[Dict[str, str]] = []
-        self.max_history_length = 20  # Increased from 10 for better context
+        self.max_history_length = 10  # Keep last 10 exchanges
         self.current_mode = "fast"  # Track current search mode
-        
-        # Initialize components
-        self.cache = AdvancedCache(default_ttl_minutes=60, max_size=200)
-        self.error_handler = ErrorHandler()
-        self.quality_scorer = ResponseQualityScorer()
-        self.query_analyzer = QueryAnalyzer()
-        
-        # Performance tracking
-        self.performance_stats = {
-            'total_requests': 0,
-            'successful_requests': 0,
-            'failed_requests': 0,
-            'average_response_time': 0,
-            'response_times': []
-        }
         
         # Initialize improved web search components if web search is enabled
         if self.use_web_search:
@@ -1916,14 +1764,8 @@ class UltraFastBrainAssistant:
         return "\n".join(context_parts) + "\n\n"
     
     def clear_conversation_history(self):
-        """Clear conversation memory and cache"""
+        """Clear conversation memory"""
         self.conversation_history = []
-        self.current_region = None
-        self.current_mode = "fast"
-        # Clear cache if available
-        if hasattr(self, 'cache'):
-            self.cache.clear_expired()
-        logger.info("Conversation history and cache cleared")
     
     def set_search_sources(self, max_sources: int):
         """Set maximum number of search sources (1-20)"""
@@ -1936,32 +1778,9 @@ class UltraFastBrainAssistant:
             self.web_search.max_sources = max_sources
             # DuckDuckGo has a limit of 5 results max
             ddg_limit = min(max_sources, 5)
-            logger.info(f"Search sources set to {max_sources}")
-    
-    def _record_response_time(self, response_time: float):
-        """Record response time for performance tracking"""
-        self.performance_stats['response_times'].append(response_time)
-        
-        # Keep only recent times
-        if len(self.performance_stats['response_times']) > 100:
-            self.performance_stats['response_times'] = self.performance_stats['response_times'][-100:]
-        
-        # Update average
-        self.performance_stats['average_response_time'] = sum(
-            self.performance_stats['response_times']
-        ) / len(self.performance_stats['response_times'])
-    
-    def get_performance_stats(self) -> Dict[str, Any]:
-        """Get performance statistics"""
-        stats = {
-            **self.performance_stats,
-            'cache_stats': self.cache.get_stats() if hasattr(self, 'cache') else {}
-        }
-        
-        if hasattr(self, 'web_search') and hasattr(self.web_search, 'get_search_stats'):
-            stats['search_stats'] = self.web_search.get_search_stats()
-        
-        return stats
+            if hasattr(self.web_search, 'ddg_search') and self.web_search.ddg_search:
+                self.web_search.ddg_search = DuckDuckGoSearchRun(max_results=ddg_limit) if DuckDuckGoSearchRun else None
+            print(f"🔍 Search sources configured: {max_sources} total sources (DuckDuckGo: {ddg_limit} results) - Maximum comprehensive coverage enabled!")
     
     # async def _async_gemini_request(self, prompt: str) -> str:
     #     """Async request for maximum speed"""
@@ -2137,171 +1956,46 @@ Provide only the 5 numbered summary points, nothing else."""
         except Exception as e:
             yield f"Error: {str(e)}"
     
-    def _extract_brain_region_from_question(self, question: str) -> Optional[str]:
-        """Extract brain region from user question using improved NLP and patterns"""
-        question_lower = question.lower().strip()
-        
-        print(f"🔍 Analyzing question: '{question}'")
-        
-        # Expanded brain regions list with variations
-        brain_regions = {
-            'hippocampus': ['hippocampus', 'hippocampal'],
-            'amygdala': ['amygdala', 'amygdaloid'],
-            'cerebellum': ['cerebellum', 'cerebellar'],
-            'prefrontal cortex': ['prefrontal cortex', 'prefrontal', 'pfc'],
-            'temporal lobe': ['temporal lobe', 'temporal'],
-            'frontal lobe': ['frontal lobe', 'frontal'],
-            'parietal lobe': ['parietal lobe', 'parietal'],
-            'occipital lobe': ['occipital lobe', 'occipital'],
-            'thalamus': ['thalamus', 'thalamic'],
-            'hypothalamus': ['hypothalamus', 'hypothalamic'],
-            'brainstem': ['brainstem', 'brain stem'],
-            'cerebral cortex': ['cerebral cortex', 'cortex'],
-            'basal ganglia': ['basal ganglia', 'basal nuclei'],
-            'corpus callosum': ['corpus callosum'],
-            'medulla': ['medulla', 'medulla oblongata'],
-            'pons': ['pons'],
-            'midbrain': ['midbrain', 'mesencephalon'],
-            'striatum': ['striatum'],
-            'caudate': ['caudate', 'caudate nucleus'],
-            'putamen': ['putamen'],
-            'substantia nigra': ['substantia nigra'],
-            'cerebrum': ['cerebrum'],
-            'insula': ['insula', 'insular cortex'],
-            'cingulate': ['cingulate', 'cingulate cortex'],
-            'motor cortex': ['motor cortex'],
-            'somatosensory cortex': ['somatosensory cortex'],
-            'visual cortex': ['visual cortex'],
-            'auditory cortex': ['auditory cortex'],
-            'broca area': ['broca area', 'broca\'s area', 'brocas area'],
-            'wernicke area': ['wernicke area', 'wernicke\'s area', 'wernickes area']
-        }
-        
-        # Method 1: Direct matching with variations
-        print("🔍 Method 1: Direct matching")
-        for region_name, variations in brain_regions.items():
-            for variation in variations:
-                if variation in question_lower:
-                    print(f"✅ Found region: {region_name} (matched: {variation})")
-                    return region_name.title()
-        
-        # Method 2: Pattern matching with improved regex
-        print("🔍 Method 2: Pattern matching")
-        patterns = [
-            r'(?:tell me about|what is|explain|describe|about|information about|details about|functions of)\s+(?:the\s+)?([a-zA-Z\s-]+?)(?:\?|$|\.|,)',
-            r'(?:how does|what does|where is)\s+(?:the\s+)?([a-zA-Z\s-]+?)(?:\s+work|\s+function|\s+located|\?|$)',
-            r'^([a-zA-Z\s-]+?)(?:\s+function|\s+anatomy|\s+structure|\?|$)',
-        ]
-        
-        import re
-        for i, pattern in enumerate(patterns, 1):
-            match = re.search(pattern, question_lower, re.IGNORECASE)
-            if match:
-                potential_region = match.group(1).strip()
-                print(f"🎯 Pattern {i} matched: '{potential_region}'")
-                
-                # Check if extracted text matches any brain region
-                for region_name, variations in brain_regions.items():
-                    for variation in variations:
-                        if (variation in potential_region.lower() or 
-                            potential_region.lower() in variation or
-                            potential_region.lower().replace(' ', '') == variation.replace(' ', '')):
-                            print(f"✅ Mapped to region: {region_name}")
-                            return region_name.title()
-        
-        # Method 3: LLM extraction with better prompt
-        print("🔍 Method 3: LLM extraction")
-        try:
-            prompt = f"""You are a brain anatomy expert. Extract the specific brain region mentioned in this question.
-
-Question: "{question}"
-
-Rules:
-- Return ONLY the brain region name (e.g., "hippocampus", "prefrontal cortex", "temporal lobe")
-- If multiple regions mentioned, return the main one
-- If no brain region is mentioned, return "NONE"
-- Use standard anatomical terms
-
-Brain region:"""
-            
-            result = self._sync_llama_request(prompt).strip().lower()
-            print(f"🤖 LLM result: '{result}'")
-            
-            if result and result != 'none' and len(result) < 50:
-                # Validate LLM result against known regions
-                for region_name, variations in brain_regions.items():
-                    for variation in variations:
-                        if variation in result or result in variation:
-                            print(f"✅ LLM result validated: {region_name}")
-                            return region_name.title()
-                # If not in our list, return the LLM result anyway
-                print(f"✅ Using LLM result: {result}")
-                return result.title()
-        except Exception as e:
-            print(f"❌ LLM extraction failed: {e}")
-        
-        print("❌ No brain region detected")
-        return None
-
     def validate_brain_region(self, region_name: str) -> bool:
-        """Check if the input is a valid brain region with improved accuracy"""
+        """Check if the input is a valid brain region"""
+        
+        # Simple heuristic check first for obvious non-brain terms
+        non_brain_terms = {'apple', 'pizza', 'car', 'computer', 'table', 'phone', 'book', 'chair', 'door', 'window'}
+        if region_name.lower() in non_brain_terms:
+            return False
+            
+        validation_prompt = f"Is '{region_name}' a brain region, brain structure, or part of the brain? Answer only 'yes' or 'no'."
+        
+        # # Use direct API call for validation
+        # data = {
+        #     "contents": [{"parts": [{"text": validation_prompt}]}],
+        #     "generationConfig": {
+        #         "temperature": 0.1,
+        #         "maxOutputTokens": 10
+        #     }
+        # }
+        # 
+        # url = f"{self.base_url}?key={self.api_key}"
+        
         try:
-            # Check cache first
-            cache_key = self.cache._generate_key('validate', region_name, '')
-            cached_result = self.cache.get(cache_key)
-            if cached_result is not None:
-                return cached_result
-            
-            # Common brain regions for quick validation
-            common_regions = {
-                'hippocampus', 'amygdala', 'cortex', 'cerebellum', 'thalamus',
-                'hypothalamus', 'brainstem', 'brain stem', 'basal ganglia',
-                'corpus callosum', 'prefrontal', 'temporal', 'parietal',
-                'occipital', 'frontal', 'striatum', 'putamen', 'caudate',
-                'nucleus accumbens', 'substantia nigra', 'medulla', 'pons',
-                'midbrain', 'cerebrum', 'neocortex', 'limbic', 'cingulate'
-            }
-            
-            # Quick check against common regions
-            region_lower = region_name.lower().strip()
-            for region in common_regions:
-                if region in region_lower or region_lower in region:
-                    self.cache.set(cache_key, True, 600)  # Cache for 10 hours
-                    return True
-            
-            # Simple heuristic check for obvious non-brain terms
-            non_brain_terms = {'apple', 'pizza', 'car', 'computer', 'table', 'phone', 'book', 'chair', 'door', 'window'}
-            if region_lower in non_brain_terms:
-                self.cache.set(cache_key, False, 600)
-                return False
-                
-            validation_prompt = f"Is '{region_name}' a brain region, brain structure, or brain area? Answer with only 'Yes' or 'No'. Consider common names, abbreviations, and alternative terms."
-            
             messages = [{"role": "user", "content": validation_prompt}]
             completion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                temperature=0,
+                temperature=0.1,
                 max_tokens=10,
                 stream=False
             )
             text = completion.choices[0].message.content.strip()
-            is_valid = 'yes' in text.lower()[:10]
-            
-            # Cache result
-            self.cache.set(cache_key, is_valid, 600)
-            
-            return is_valid
-        except Exception as e:
-            logger.error(f"Error validating brain region: {e}")
+            # Check for 'yes' at the beginning of the response
+            return text.lower().startswith('yes')
+        except Exception:
             # Fallback validation
-            brain_terms = {'brain', 'cortex', 'lobe', 'hippocampus', 'amygdala', 'thalamus', 'cerebellum', 'stem', 'hemisphere'}
+            brain_terms = {'brain', 'cortex', 'lobe', 'hippocampus', 'amygdala', 'thalamus', 'cerebellum', 'stem', 'hemispheres'}
             return any(term in region_name.lower() for term in brain_terms)
     
     def get_brain_region_info(self, region_name: str, mode: str = "fast") -> Tuple[bool, str]:
-        """Get brain region info with different modes and performance tracking"""
-        start_time = time.time()
-        self.performance_stats['total_requests'] += 1
+        """Get brain region info with different modes"""
         
         # First validate if it's a brain region
         print("🧠 Validating brain region...")
@@ -2340,15 +2034,17 @@ Brain region:"""
                 
             elif mode == "ultra":
                 # Use async for ultra-fast mode
-                prompt = f"""Provide exactly 5 key points about {region_name} brain region. Each point should have 2-3 lines maximum:
+                prompt = f"""List key facts about {region_name} brain region:
 
-• **Location**: Where in the brain and main divisions
-• **Primary Function**: Main role and key activities  
-• **Neural Connections**: Major inputs and outputs
-• **Clinical Significance**: Key disorders or conditions
-• **Unique Features**: What makes this region distinctive
+**Location**: Where in the brain?
 
-Keep each point to 2-3 lines. Be concise and factual."""
+**Function**: Primary roles
+
+**Connections**: Key pathways  
+
+**Clinical**: Related conditions
+
+Format with proper spacing. Keep under 100 words."""
                 try:
                     loop = asyncio.get_event_loop()
                     info = loop.run_until_complete(self._async_llama_request(prompt))
@@ -2382,69 +2078,17 @@ Keep it under 200 words but be informative.{context}"""
                     full_response,
                     "region_info"
                 )
-                
-                # Record performance metrics
-                self._record_response_time(time.time() - start_time)
-                self.performance_stats['successful_requests'] += 1
-                
                 return (True, full_response)
             else:
-                self.performance_stats['failed_requests'] += 1
-                self._record_response_time(time.time() - start_time)
                 return (False, "Failed to retrieve information")
                 
         except Exception as e:
-            self.performance_stats['failed_requests'] += 1
-            self._record_response_time(time.time() - start_time)
-            logger.error(f"Error in get_brain_region_info: {e}")
             return (False, f"Error: {str(e)}")
     
     def ask_question(self, question: str, use_web: bool = False) -> str:
         """Ask questions with optional web search and conversation context"""
-        print(f"🔍 ask_question called with: '{question}'")
-        print(f"🔍 Current region: {self.current_region}")
-        
-        # ALWAYS try to extract brain region from question regardless of current_region
-        extracted_region = self._extract_brain_region_from_question(question)
-        if extracted_region and not self.current_region:
-            self.current_region = extracted_region
-            print(f"✅ Detected and set brain region: {extracted_region}")
-        
-        # If we don't have a brain region, check if it's a general brain question
         if not self.current_region:
-            brain_keywords = ['brain', 'neural', 'neuron', 'synapse', 'cognitive', 'memory', 'emotion', 'learning', 'behavior', 'neuroscience', 'psychology', 'mind', 'consciousness']
-            if any(keyword in question.lower() for keyword in brain_keywords):
-                print("🧠 Detected general brain question")
-                # Try to provide a general brain-related answer
-                context = self.get_conversation_context(2)
-                prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
-                try:
-                    if use_web and self.use_web_search:
-                        response = self.web_search.search(prompt, self.llm)
-                        summary = self._generate_summary(response)
-                        full_response = f"{response}\n\n{summary}"
-                    else:
-                        full_response = self._sync_llama_request(prompt)
-                    
-                    self.add_to_conversation(question, full_response, "general_brain")
-                    return full_response
-                except Exception as e:
-                    print(f"❌ Error in general brain answer: {e}")
-            
-            # If we reach here, provide helpful guidance
-            return """I can help you with brain and neuroscience questions! Here are some examples:
-
-**Specific Brain Regions:**
-• "Tell me about the hippocampus"  
-• "What does the amygdala do?"
-• "Explain the prefrontal cortex"
-
-**General Brain Topics:**
-• "How does memory work?"
-• "What are neurons?"
-• "How does the brain process emotions?"
-
-**Or click on a brain region in the atlas above!**"""
+            return "Please specify a brain region first using 'region <name>'"
         
         try:
             # Get conversation context for continuity
@@ -2488,58 +2132,8 @@ Keep it under 200 words but be informative.{context}"""
 
     def ask_question_stream(self, question: str, use_web: bool = False):
         """Ask questions with streaming response"""
-        print(f"🔍 ask_question_stream called with: '{question}'")
-        print(f"🔍 Current region: {self.current_region}")
-        
-        # ALWAYS try to extract brain region from question regardless of current_region
-        extracted_region = self._extract_brain_region_from_question(question)
-        if extracted_region and not self.current_region:
-            self.current_region = extracted_region
-            yield f"**Analyzing {extracted_region}...**\n\n"
-        
-        # If we have a brain region (either existing or newly extracted), process normally
-        if self.current_region:
-            print(f"✅ Processing with region: {self.current_region}")
-        else:
-            # Check if question seems to be about brain/neuroscience but no specific region detected
-            brain_keywords = ['brain', 'neural', 'neuron', 'synapse', 'cognitive', 'memory', 'emotion', 'learning', 'behavior', 'neuroscience', 'psychology', 'mind', 'consciousness']
-            if any(keyword in question.lower() for keyword in brain_keywords):
-                print("🧠 Detected general brain question")
-                # Try to provide a general brain-related answer with streaming
-                context = self.get_conversation_context(2)
-                prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
-                try:
-                    full_response = ""
-                    if use_web and self.use_web_search:
-                        response = self.web_search.search(prompt, self.llm)
-                        # Stream the response in chunks
-                        for chunk in self._chunk_response(response):
-                            yield chunk
-                            full_response += chunk
-                    else:
-                        for chunk in self._stream_llama_request(prompt):
-                            yield chunk
-                            full_response += chunk
-                    
-                    self.add_to_conversation(question, full_response, "general_brain")
-                    return
-                except Exception as e:
-                    print(f"❌ Error in general brain answer: {e}")
-            
-            # If we reach here, provide helpful guidance
-            yield """I can help you with brain and neuroscience questions! Here are some examples:
-
-**Specific Brain Regions:**
-• "Tell me about the hippocampus"
-• "What does the amygdala do?"
-• "Explain the prefrontal cortex"
-
-**General Brain Topics:**
-• "How does memory work?"
-• "What are neurons?"
-• "How does the brain process emotions?"
-
-**Or click on a brain region in the atlas above!**"""
+        if not self.current_region:
+            yield "Please specify a brain region first using 'region <name>'"
             return
         
         try:
@@ -2610,7 +2204,6 @@ Keep it under 200 words but be informative.{context}"""
     
     def get_brain_region_info_stream(self, region_name: str, mode: str = "fast"):
         """Get brain region info with streaming response"""
-        start_time = time.time()
         self.current_region = region_name
         self.current_mode = mode
         
@@ -2666,22 +2259,25 @@ Keep it under 200 words but be informative.{context}"""
                 
             elif mode == "ultra":
                 # Ultra-fast mode with streaming
-                prompt = f"""Provide exactly 5 key points about {region_name} brain region. Each point should have 2-3 lines maximum:
-
-• **Location**: Where in the brain and main divisions
-• **Primary Function**: Main role and key activities  
-• **Neural Connections**: Major inputs and outputs
-• **Clinical Significance**: Key disorders or conditions
-• **Unique Features**: What makes this region distinctive
-
-Keep each point to 2-3 lines. Be concise and factual."""
+                prompt = f"""List key facts about {region_name} brain region:
+• Location and main divisions
+• Primary functions (2-3 bullet points)
+• Major connections (inputs/outputs)
+• Clinical relevance (1-2 key points)"""
                 
                 full_response = ""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk
                     full_response += chunk
                 
-                info = full_response
+                # Generate and stream summary for ultra mode
+                yield "\n\n"
+                summary_content = ""
+                for chunk in self._generate_summary_stream(full_response):
+                    yield chunk
+                    summary_content += chunk
+                
+                info = f"{full_response}\n\n{summary_content}"
                 
             else:  # fast mode
                 prompt = f"""Provide information about {region_name} brain region:
@@ -2710,10 +2306,6 @@ Keep response focused yet informative."""
             
             # Add to conversation history
             self.add_to_conversation(f"Tell me about {region_name}", info, "region_info")
-            
-            # Record performance metrics
-            self._record_response_time(time.time() - start_time)
-            self.performance_stats['successful_requests'] += 1
             
         except Exception as e:
             error_msg = f"Error getting information: {str(e)}"
@@ -2900,7 +2492,7 @@ def main():
                 print(f"\nHow would you like to search for {region_name}?")
                 print("1. Fast mode (concise overview)")
                 print("2. Detailed mode (comprehensive analysis)")
-                print("3. Ultra-fast mode (5 key points, 2-3 lines each)")
+                print("3. Ultra-fast mode (key facts only)")
                 
                 mode_input = input("Enter choice (1/2/3, default=1): ").strip() or "1"
                 
@@ -2988,7 +2580,7 @@ def main():
                             print("How would you like me to search?")
                             print("1. Fast mode (concise overview)")
                             print("2. Detailed mode (comprehensive web search)")
-                            print("3. Ultra-fast mode (5 key points, 2-3 lines each)")
+                            print("3. Ultra-fast mode (key facts only)")
                             
                             mode_input = input("Enter choice (1/2/3, default=2): ").strip() or "2"
                             mode_map = {"1": "fast", "2": "web", "3": "ultra"}
