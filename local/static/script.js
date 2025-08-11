@@ -11,6 +11,86 @@ let currentSeriesType = 'NISSL';
 const session_id = 'demo_session';
 const tool_name = 'combined_viewer';
 
+// ==================== Loading Animation Functions ====================
+const loadingOverlay = document.getElementById('loadingOverlay');
+const loadingText = document.getElementById('loadingText');
+
+// Image loading progress tracking
+let totalImagesToLoad = 0;
+let imagesLoadedCount = 0;
+let imageLoadingTimeout = null;
+
+function showLoading(text = 'Loading') {
+    loadingText.textContent = text;
+    loadingOverlay.classList.add('show');
+}
+
+function hideLoading() {
+    loadingOverlay.classList.remove('show');
+}
+
+function showMessageLoading(container) {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message-loading';
+    loadingDiv.innerHTML = `
+        <div class="message-spinner"></div>
+        <div class="message-loading-text">Assistant is thinking...</div>
+    `;
+    container.appendChild(loadingDiv);
+    return loadingDiv;
+}
+
+function removeMessageLoading(loadingElement) {
+    if (loadingElement && loadingElement.parentNode) {
+        loadingElement.parentNode.removeChild(loadingElement);
+    }
+}
+
+function setButtonLoading(button, isLoading) {
+    if (isLoading) {
+        button.classList.add('btn-loading');
+        button.disabled = true;
+        button.dataset.originalText = button.textContent;
+        button.textContent = '';
+    } else {
+        button.classList.remove('btn-loading');
+        button.disabled = false;
+        if (button.dataset.originalText) {
+            button.textContent = button.dataset.originalText;
+        }
+    }
+}
+
+function startImageLoading(totalImages) {
+    totalImagesToLoad = totalImages;
+    imagesLoadedCount = 0;
+    if (totalImages > 0) {
+        showLoading(`Loading images (0/${totalImages})`);
+        
+        // Set timeout to hide loading if images take too long
+        if (imageLoadingTimeout) clearTimeout(imageLoadingTimeout);
+        imageLoadingTimeout = setTimeout(() => {
+            hideLoading();
+        }, 10000); // 10 second timeout
+    }
+}
+
+function updateImageLoadingProgress() {
+    imagesLoadedCount++;
+    const progress = `Loading images (${imagesLoadedCount}/${totalImagesToLoad})`;
+    loadingText.textContent = progress;
+    
+    if (imagesLoadedCount >= totalImagesToLoad) {
+        if (imageLoadingTimeout) {
+            clearTimeout(imageLoadingTimeout);
+            imageLoadingTimeout = null;
+        }
+        setTimeout(() => {
+            hideLoading();
+        }, 300); // Small delay to show completion
+    }
+}
+
 // ==================== Panel Resize Functionality ====================
 let isResizing = false;
 const resizeHandle = document.querySelector('.resize-handle');
@@ -131,10 +211,14 @@ let notAvailableTimeout = null;
 
 async function getGeoJSON(url) {
 try {
+    showLoading('Loading atlas data');
     const response = await fetch(url);
-    return await response.json();
+    const data = await response.json();
+    hideLoading();
+    return data;
 } catch (error) {
     console.error('Error fetching GeoJSON:', error);
+    hideLoading();
     return null;
 }
 }
@@ -369,6 +453,35 @@ getGeoJSON(GEOJSON_URL).then(geojsonData => {
         source: zoomifySource
     });
 
+    // Add tile loading events
+    let tilesLoading = 0;
+    let tilesLoaded = 0;
+
+    zoomifySource.on('tileloadstart', function() {
+        tilesLoading++;
+        if (tilesLoading === 1) {
+            showLoading('Loading atlas tiles');
+        }
+    });
+
+    zoomifySource.on('tileloadend', function() {
+        tilesLoaded++;
+        if (tilesLoaded >= tilesLoading) {
+            hideLoading();
+            tilesLoading = 0;
+            tilesLoaded = 0;
+        }
+    });
+
+    zoomifySource.on('tileloaderror', function() {
+        tilesLoaded++;
+        if (tilesLoaded >= tilesLoading) {
+            hideLoading();
+            tilesLoading = 0;
+            tilesLoaded = 0;
+        }
+    });
+
     const extent = zoomifySource.getTileGrid().getExtent();
 
     map = new Map({
@@ -598,8 +711,10 @@ const grid2 = document.getElementById("image-grid-2");
 
 async function fetchImages() {
 try {
+    showLoading('Loading thumbnails');
     const response = await fetch(THUMBNAIL_API_URL);
     if (!response.ok) {
+        hideLoading();
         throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const data = await response.json();
@@ -636,8 +751,10 @@ try {
     }
 
     renderImages(grid1, startIndex);
+    hideLoading();
 } catch (error) {
     console.error("Error fetching images:", error);
+    hideLoading();
 }
 }
 
@@ -653,15 +770,58 @@ return Math.floor(thumbnailPanelHeight / 90);
 
 function createImageElement(image, index) {
 const container = document.createElement("div");
-container.classList.add("image-container");
+container.classList.add("image-container", "loading");
 container.setAttribute("data-section-no", image.sectionNo);
 
-const img = document.createElement("img");
-img.src = image.thumbnailUrl;
+// Add loading spinner
+const loadingSpinner = document.createElement("div");
+loadingSpinner.classList.add("image-loading-spinner");
+container.appendChild(loadingSpinner);
 
-img.onerror = function () {
-    img.style.display = "none";
+// Add skeleton placeholder
+const skeleton = document.createElement("div");
+skeleton.classList.add("image-skeleton");
+container.appendChild(skeleton);
+
+const img = document.createElement("img");
+img.style.opacity = "0"; // Start hidden
+
+// Handle successful image load
+img.onload = function () {
+    container.classList.remove("loading");
+    container.classList.add("loaded");
+    if (loadingSpinner.parentNode) {
+        loadingSpinner.parentNode.removeChild(loadingSpinner);
+    }
+    if (skeleton.parentNode) {
+        skeleton.parentNode.removeChild(skeleton);
+    }
+    img.style.opacity = "1";
+    updateImageLoadingProgress();
 };
+
+// Handle image load error
+img.onerror = function () {
+    container.classList.remove("loading");
+    container.classList.add("error");
+    if (loadingSpinner.parentNode) {
+        loadingSpinner.parentNode.removeChild(loadingSpinner);
+    }
+    if (skeleton.parentNode) {
+        skeleton.parentNode.removeChild(skeleton);
+    }
+    img.style.display = "none";
+    
+    // Add error icon
+    const errorIcon = document.createElement("div");
+    errorIcon.classList.add("image-error-icon");
+    errorIcon.innerHTML = "⚠️";
+    container.appendChild(errorIcon);
+    updateImageLoadingProgress();
+};
+
+// Set the source after setting up handlers
+img.src = image.thumbnailUrl;
 
 const label = document.createElement("span");
 label.classList.add("image-id");
@@ -789,10 +949,11 @@ for (let col = 0; col < columns; col++) {
     }
 }
 
-columnWiseImages.flat().forEach((image) => {
-    if (image) {
-        grid.appendChild(createImageElement(image));
-    }
+const imagesToRender = columnWiseImages.flat().filter(image => image !== null);
+startImageLoading(imagesToRender.length);
+
+imagesToRender.forEach((image) => {
+    grid.appendChild(createImageElement(image));
 });
 }
 
@@ -1171,7 +1332,7 @@ if (e.target === historyModal) {
 
 // Enable/disable ask button based on input
 questionInput.addEventListener('input', () => {
-if (currentBrainRegion && questionInput.value.trim()) {
+if (questionInput.value.trim()) {
     askBtn.disabled = false;
 } else {
     askBtn.disabled = true;
@@ -1195,7 +1356,7 @@ addMessage(`Tell me about the ${regionName}`, 'user');
 
 // Show loading
 const loadingMsg = addMessage('', 'bot');
-loadingMsg.innerHTML = '<div class="loading"></div> Analyzing brain region...';
+const loadingElement = showMessageLoading(loadingMsg);
 
 // Get selected mode
 const mode = document.querySelector('input[name="mode"]:checked').value;
@@ -1216,7 +1377,9 @@ try {
         });
         
         // Remove loading message
-        loadingMsg.remove();
+        removeMessageLoading(loadingElement);
+        removeMessageLoading(loadingElement);
+    loadingMsg.remove();
         
         // Create a new message for streaming content
         const streamMsg = addMessage('', 'bot');
@@ -1255,16 +1418,21 @@ try {
             }
         }
 } catch (error) {
+    removeMessageLoading(loadingElement);
     loadingMsg.remove();
     addMessage(`Error: ${error.message}`, 'bot');
 } finally {
     isWaitingForResponse = false;
+    setButtonLoading(askBtn, false);
 }
 }
 
 async function handleAskQuestion() {
 const question = questionInput.value.trim();
-if (!question || !currentBrainRegion || isWaitingForResponse) return;
+if (!question || isWaitingForResponse) return;
+
+// Set loading state for button
+setButtonLoading(askBtn, true);
 
 // Add user message
 addMessage(question, 'user');
@@ -1274,7 +1442,7 @@ questionInput.value = '';
 
 // Show loading
 const loadingMsg = addMessage('', 'bot');
-loadingMsg.innerHTML = '<div class="loading"></div> Thinking...';
+const loadingElement = showMessageLoading(loadingMsg);
 
 // Get selected mode to determine if web search should be used
 const mode = document.querySelector('input[name="mode"]:checked').value;
@@ -1297,7 +1465,9 @@ try {
         });
         
         // Remove loading message
-        loadingMsg.remove();
+        removeMessageLoading(loadingElement);
+        removeMessageLoading(loadingElement);
+    loadingMsg.remove();
         
         // Create a new message for streaming content
         const streamMsg = addMessage('', 'bot');
@@ -1335,10 +1505,12 @@ try {
         }
     
 } catch (error) {
+    removeMessageLoading(loadingElement);
     loadingMsg.remove();
     addMessage(`Error: ${error.message}`, 'bot');
 } finally {
     isWaitingForResponse = false;
+    setButtonLoading(askBtn, false);
 }
 }
 
@@ -1405,16 +1577,20 @@ return messageP;
 
 async function showChatHistory() {
 try {
+    showLoading('Loading chat history');
     const response = await fetch('/api/chat-history');
     const data = await response.json();
     
     if (data.success) {
         displayChatHistory(data.chat_history, data.current_region, data.current_mode);
         historyModal.style.display = 'block';
+        hideLoading();
     } else {
+        hideLoading();
         alert('Error loading chat history: ' + data.message);
     }
 } catch (error) {
+    hideLoading();
     alert('Error loading chat history: ' + error.message);
 }
 }
@@ -1489,6 +1665,7 @@ Object.keys(groupedHistory).forEach(region => {
 
 async function downloadChatHistory() {
 try {
+    showLoading('Preparing download');
     const response = await fetch('/api/chat-history');
     const data = await response.json();
     
@@ -1504,10 +1681,13 @@ try {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        hideLoading();
     } else {
+        hideLoading();
         alert('Error downloading chat history: ' + data.message);
     }
 } catch (error) {
+    hideLoading();
     alert('Error downloading chat history: ' + error.message);
 }
 }
@@ -1546,6 +1726,7 @@ if (!confirm('Are you sure you want to clear all chat history? This cannot be un
 }
 
 try {
+    showLoading('Clearing chat history');
     const response = await fetch('/api/chat-history', {
         method: 'DELETE'
     });
@@ -1561,10 +1742,13 @@ try {
         alert('Chat history cleared successfully!');
         // Close history modal if open
         historyModal.style.display = 'none';
+        hideLoading();
     } else {
+        hideLoading();
         alert('Error clearing chat history: ' + data.message);
     }
 } catch (error) {
+    hideLoading();
     alert('Error clearing chat history: ' + error.message);
 }
 }

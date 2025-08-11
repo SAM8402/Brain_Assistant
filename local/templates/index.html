@@ -113,14 +113,14 @@
                             <input type="radio" name="mode" value="fast" checked> Fast
                         </label>
                         <label>
-                            <input type="radio" name="mode" value="web"> Detailed (Web)
+                            <input type="radio" name="mode" value="web"> Web Search
                         </label>
                         <label>
-                            <input type="radio" name="mode" value="ultra"> Ultra-fast
+                            <input type="radio" name="mode" value="ultra"> Ultra-fast (5 points)
                         </label>
                     </div>
                     <div class="chat-input">
-                        <input type="text" id="questionInput" placeholder="Ask a question about the selected brain region...">
+                        <input type="text" id="questionInput" placeholder="Ask about any brain region (e.g., 'Tell me about the hippocampus')">
                         <button id="askBtn" disabled>Ask</button>
                     </div>
                 </div>
@@ -154,6 +154,16 @@
             <div class="modal-footer">
                 <button class="btn-secondary" id="downloadHistory">Download History</button>
                 <button class="btn-primary" id="closeHistoryBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">
+                <span id="loadingText">Loading</span><span class="loading-dots"></span>
             </div>
         </div>
     </div>

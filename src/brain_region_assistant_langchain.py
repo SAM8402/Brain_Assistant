@@ -2137,6 +2137,112 @@ Provide only the 5 numbered summary points, nothing else."""
         except Exception as e:
             yield f"Error: {str(e)}"
     
+    def _extract_brain_region_from_question(self, question: str) -> Optional[str]:
+        """Extract brain region from user question using improved NLP and patterns"""
+        question_lower = question.lower().strip()
+        
+        print(f"🔍 Analyzing question: '{question}'")
+        
+        # Expanded brain regions list with variations
+        brain_regions = {
+            'hippocampus': ['hippocampus', 'hippocampal'],
+            'amygdala': ['amygdala', 'amygdaloid'],
+            'cerebellum': ['cerebellum', 'cerebellar'],
+            'prefrontal cortex': ['prefrontal cortex', 'prefrontal', 'pfc'],
+            'temporal lobe': ['temporal lobe', 'temporal'],
+            'frontal lobe': ['frontal lobe', 'frontal'],
+            'parietal lobe': ['parietal lobe', 'parietal'],
+            'occipital lobe': ['occipital lobe', 'occipital'],
+            'thalamus': ['thalamus', 'thalamic'],
+            'hypothalamus': ['hypothalamus', 'hypothalamic'],
+            'brainstem': ['brainstem', 'brain stem'],
+            'cerebral cortex': ['cerebral cortex', 'cortex'],
+            'basal ganglia': ['basal ganglia', 'basal nuclei'],
+            'corpus callosum': ['corpus callosum'],
+            'medulla': ['medulla', 'medulla oblongata'],
+            'pons': ['pons'],
+            'midbrain': ['midbrain', 'mesencephalon'],
+            'striatum': ['striatum'],
+            'caudate': ['caudate', 'caudate nucleus'],
+            'putamen': ['putamen'],
+            'substantia nigra': ['substantia nigra'],
+            'cerebrum': ['cerebrum'],
+            'insula': ['insula', 'insular cortex'],
+            'cingulate': ['cingulate', 'cingulate cortex'],
+            'motor cortex': ['motor cortex'],
+            'somatosensory cortex': ['somatosensory cortex'],
+            'visual cortex': ['visual cortex'],
+            'auditory cortex': ['auditory cortex'],
+            'broca area': ['broca area', 'broca\'s area', 'brocas area'],
+            'wernicke area': ['wernicke area', 'wernicke\'s area', 'wernickes area']
+        }
+        
+        # Method 1: Direct matching with variations
+        print("🔍 Method 1: Direct matching")
+        for region_name, variations in brain_regions.items():
+            for variation in variations:
+                if variation in question_lower:
+                    print(f"✅ Found region: {region_name} (matched: {variation})")
+                    return region_name.title()
+        
+        # Method 2: Pattern matching with improved regex
+        print("🔍 Method 2: Pattern matching")
+        patterns = [
+            r'(?:tell me about|what is|explain|describe|about|information about|details about|functions of)\s+(?:the\s+)?([a-zA-Z\s-]+?)(?:\?|$|\.|,)',
+            r'(?:how does|what does|where is)\s+(?:the\s+)?([a-zA-Z\s-]+?)(?:\s+work|\s+function|\s+located|\?|$)',
+            r'^([a-zA-Z\s-]+?)(?:\s+function|\s+anatomy|\s+structure|\?|$)',
+        ]
+        
+        import re
+        for i, pattern in enumerate(patterns, 1):
+            match = re.search(pattern, question_lower, re.IGNORECASE)
+            if match:
+                potential_region = match.group(1).strip()
+                print(f"🎯 Pattern {i} matched: '{potential_region}'")
+                
+                # Check if extracted text matches any brain region
+                for region_name, variations in brain_regions.items():
+                    for variation in variations:
+                        if (variation in potential_region.lower() or 
+                            potential_region.lower() in variation or
+                            potential_region.lower().replace(' ', '') == variation.replace(' ', '')):
+                            print(f"✅ Mapped to region: {region_name}")
+                            return region_name.title()
+        
+        # Method 3: LLM extraction with better prompt
+        print("🔍 Method 3: LLM extraction")
+        try:
+            prompt = f"""You are a brain anatomy expert. Extract the specific brain region mentioned in this question.
+
+Question: "{question}"
+
+Rules:
+- Return ONLY the brain region name (e.g., "hippocampus", "prefrontal cortex", "temporal lobe")
+- If multiple regions mentioned, return the main one
+- If no brain region is mentioned, return "NONE"
+- Use standard anatomical terms
+
+Brain region:"""
+            
+            result = self._sync_llama_request(prompt).strip().lower()
+            print(f"🤖 LLM result: '{result}'")
+            
+            if result and result != 'none' and len(result) < 50:
+                # Validate LLM result against known regions
+                for region_name, variations in brain_regions.items():
+                    for variation in variations:
+                        if variation in result or result in variation:
+                            print(f"✅ LLM result validated: {region_name}")
+                            return region_name.title()
+                # If not in our list, return the LLM result anyway
+                print(f"✅ Using LLM result: {result}")
+                return result.title()
+        except Exception as e:
+            print(f"❌ LLM extraction failed: {e}")
+        
+        print("❌ No brain region detected")
+        return None
+
     def validate_brain_region(self, region_name: str) -> bool:
         """Check if the input is a valid brain region with improved accuracy"""
         try:
@@ -2234,17 +2340,15 @@ Provide only the 5 numbered summary points, nothing else."""
                 
             elif mode == "ultra":
                 # Use async for ultra-fast mode
-                prompt = f"""List key facts about {region_name} brain region:
+                prompt = f"""Provide exactly 5 key points about {region_name} brain region. Each point should have 2-3 lines maximum:
 
-**Location**: Where in the brain?
+• **Location**: Where in the brain and main divisions
+• **Primary Function**: Main role and key activities  
+• **Neural Connections**: Major inputs and outputs
+• **Clinical Significance**: Key disorders or conditions
+• **Unique Features**: What makes this region distinctive
 
-**Function**: Primary roles
-
-**Connections**: Key pathways  
-
-**Clinical**: Related conditions
-
-Format with proper spacing. Keep under 100 words."""
+Keep each point to 2-3 lines. Be concise and factual."""
                 try:
                     loop = asyncio.get_event_loop()
                     info = loop.run_until_complete(self._async_llama_request(prompt))
@@ -2297,8 +2401,50 @@ Keep it under 200 words but be informative.{context}"""
     
     def ask_question(self, question: str, use_web: bool = False) -> str:
         """Ask questions with optional web search and conversation context"""
+        print(f"🔍 ask_question called with: '{question}'")
+        print(f"🔍 Current region: {self.current_region}")
+        
+        # ALWAYS try to extract brain region from question regardless of current_region
+        extracted_region = self._extract_brain_region_from_question(question)
+        if extracted_region and not self.current_region:
+            self.current_region = extracted_region
+            print(f"✅ Detected and set brain region: {extracted_region}")
+        
+        # If we don't have a brain region, check if it's a general brain question
         if not self.current_region:
-            return "Please specify a brain region first using 'region <name>'"
+            brain_keywords = ['brain', 'neural', 'neuron', 'synapse', 'cognitive', 'memory', 'emotion', 'learning', 'behavior', 'neuroscience', 'psychology', 'mind', 'consciousness']
+            if any(keyword in question.lower() for keyword in brain_keywords):
+                print("🧠 Detected general brain question")
+                # Try to provide a general brain-related answer
+                context = self.get_conversation_context(2)
+                prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
+                try:
+                    if use_web and self.use_web_search:
+                        response = self.web_search.search(prompt, self.llm)
+                        summary = self._generate_summary(response)
+                        full_response = f"{response}\n\n{summary}"
+                    else:
+                        full_response = self._sync_llama_request(prompt)
+                    
+                    self.add_to_conversation(question, full_response, "general_brain")
+                    return full_response
+                except Exception as e:
+                    print(f"❌ Error in general brain answer: {e}")
+            
+            # If we reach here, provide helpful guidance
+            return """I can help you with brain and neuroscience questions! Here are some examples:
+
+**Specific Brain Regions:**
+• "Tell me about the hippocampus"  
+• "What does the amygdala do?"
+• "Explain the prefrontal cortex"
+
+**General Brain Topics:**
+• "How does memory work?"
+• "What are neurons?"
+• "How does the brain process emotions?"
+
+**Or click on a brain region in the atlas above!**"""
         
         try:
             # Get conversation context for continuity
@@ -2342,8 +2488,58 @@ Keep it under 200 words but be informative.{context}"""
 
     def ask_question_stream(self, question: str, use_web: bool = False):
         """Ask questions with streaming response"""
-        if not self.current_region:
-            yield "Please specify a brain region first using 'region <name>'"
+        print(f"🔍 ask_question_stream called with: '{question}'")
+        print(f"🔍 Current region: {self.current_region}")
+        
+        # ALWAYS try to extract brain region from question regardless of current_region
+        extracted_region = self._extract_brain_region_from_question(question)
+        if extracted_region and not self.current_region:
+            self.current_region = extracted_region
+            yield f"**Analyzing {extracted_region}...**\n\n"
+        
+        # If we have a brain region (either existing or newly extracted), process normally
+        if self.current_region:
+            print(f"✅ Processing with region: {self.current_region}")
+        else:
+            # Check if question seems to be about brain/neuroscience but no specific region detected
+            brain_keywords = ['brain', 'neural', 'neuron', 'synapse', 'cognitive', 'memory', 'emotion', 'learning', 'behavior', 'neuroscience', 'psychology', 'mind', 'consciousness']
+            if any(keyword in question.lower() for keyword in brain_keywords):
+                print("🧠 Detected general brain question")
+                # Try to provide a general brain-related answer with streaming
+                context = self.get_conversation_context(2)
+                prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
+                try:
+                    full_response = ""
+                    if use_web and self.use_web_search:
+                        response = self.web_search.search(prompt, self.llm)
+                        # Stream the response in chunks
+                        for chunk in self._chunk_response(response):
+                            yield chunk
+                            full_response += chunk
+                    else:
+                        for chunk in self._stream_llama_request(prompt):
+                            yield chunk
+                            full_response += chunk
+                    
+                    self.add_to_conversation(question, full_response, "general_brain")
+                    return
+                except Exception as e:
+                    print(f"❌ Error in general brain answer: {e}")
+            
+            # If we reach here, provide helpful guidance
+            yield """I can help you with brain and neuroscience questions! Here are some examples:
+
+**Specific Brain Regions:**
+• "Tell me about the hippocampus"
+• "What does the amygdala do?"
+• "Explain the prefrontal cortex"
+
+**General Brain Topics:**
+• "How does memory work?"
+• "What are neurons?"
+• "How does the brain process emotions?"
+
+**Or click on a brain region in the atlas above!**"""
             return
         
         try:
@@ -2470,25 +2666,22 @@ Keep it under 200 words but be informative.{context}"""
                 
             elif mode == "ultra":
                 # Ultra-fast mode with streaming
-                prompt = f"""List key facts about {region_name} brain region:
-• Location and main divisions
-• Primary functions (2-3 bullet points)
-• Major connections (inputs/outputs)
-• Clinical relevance (1-2 key points)"""
+                prompt = f"""Provide exactly 5 key points about {region_name} brain region. Each point should have 2-3 lines maximum:
+
+• **Location**: Where in the brain and main divisions
+• **Primary Function**: Main role and key activities  
+• **Neural Connections**: Major inputs and outputs
+• **Clinical Significance**: Key disorders or conditions
+• **Unique Features**: What makes this region distinctive
+
+Keep each point to 2-3 lines. Be concise and factual."""
                 
                 full_response = ""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk
                     full_response += chunk
                 
-                # Generate and stream summary for ultra mode
-                yield "\n\n"
-                summary_content = ""
-                for chunk in self._generate_summary_stream(full_response):
-                    yield chunk
-                    summary_content += chunk
-                
-                info = f"{full_response}\n\n{summary_content}"
+                info = full_response
                 
             else:  # fast mode
                 prompt = f"""Provide information about {region_name} brain region:
@@ -2707,7 +2900,7 @@ def main():
                 print(f"\nHow would you like to search for {region_name}?")
                 print("1. Fast mode (concise overview)")
                 print("2. Detailed mode (comprehensive analysis)")
-                print("3. Ultra-fast mode (key facts only)")
+                print("3. Ultra-fast mode (5 key points, 2-3 lines each)")
                 
                 mode_input = input("Enter choice (1/2/3, default=1): ").strip() or "1"
                 
@@ -2795,7 +2988,7 @@ def main():
                             print("How would you like me to search?")
                             print("1. Fast mode (concise overview)")
                             print("2. Detailed mode (comprehensive web search)")
-                            print("3. Ultra-fast mode (key facts only)")
+                            print("3. Ultra-fast mode (5 key points, 2-3 lines each)")
                             
                             mode_input = input("Enter choice (1/2/3, default=2): ").strip() or "2"
                             mode_map = {"1": "fast", "2": "web", "3": "ultra"}

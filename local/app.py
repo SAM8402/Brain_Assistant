@@ -2015,11 +2015,7 @@ def ask_question():
                 'message': 'Please provide a question'
             }), 400
         
-        if not assistant.current_region:
-            return jsonify({
-                'success': False,
-                'message': 'Please select a brain region first'
-            }), 400
+        # Remove the region requirement check - let the assistant handle region extraction
         
         # Sync conversation history before processing
         sync_assistant_history()
@@ -2030,13 +2026,15 @@ def ask_question():
         
         # Add user question to chat history
         search_indicator = " (web search)" if use_web else ""
-        add_to_chat_history('user_query', f"{question}{search_indicator}", assistant.current_region)
+        current_region = getattr(assistant, 'current_region', None)
+        add_to_chat_history('user_query', f"{question}{search_indicator}", current_region)
         
         # Get answer
         answer = assistant.ask_question(question, use_web)
         
         # Add assistant answer to chat history
-        add_to_chat_history('assistant_response', answer, assistant.current_region)
+        current_region = getattr(assistant, 'current_region', None)
+        add_to_chat_history('assistant_response', answer, current_region)
         
         return jsonify({
             'success': True,
@@ -2048,7 +2046,8 @@ def ask_question():
         
     except Exception as e:
         error_msg = f'Error: {str(e)}'
-        add_to_chat_history('assistant_response', error_msg, assistant.current_region)
+        current_region = getattr(assistant, 'current_region', None)
+        add_to_chat_history('assistant_response', error_msg, current_region)
         return jsonify({
             'success': False,
             'message': error_msg,
@@ -2069,8 +2068,7 @@ def ask_question_stream():
     if not question:
         return jsonify({'success': False, 'message': 'Please provide a question'}), 400
     
-    if not assistant.current_region:
-        return jsonify({'success': False, 'message': 'Please select a brain region first'}), 400
+    # Remove the region requirement check - let the assistant handle region extraction
     
     # Sync conversation history before processing
     sync_assistant_history()
@@ -2081,10 +2079,15 @@ def ask_question_stream():
     
     # Add user question to chat history
     search_indicator = " (web search)" if use_web else ""
-    add_to_chat_history('user_query', f"{question}{search_indicator}", assistant.current_region)
+    current_region = getattr(assistant, 'current_region', None)
+    add_to_chat_history('user_query', f"{question}{search_indicator}", current_region)
     
     def generate():
         try:
+            # Debug info
+            print(f"🔍 Flask: Processing question: '{question}'")
+            print(f"🔍 Flask: Current region before: {getattr(assistant, 'current_region', 'None')}")
+            
             # Get streaming answer
             full_response = ""
             for chunk in assistant.ask_question_stream(question, use_web):
@@ -2093,14 +2096,16 @@ def ask_question_stream():
                 yield f"data: {json.dumps({'chunk': chunk, 'success': True})}\n\n"
             
             # Add complete answer to chat history
-            add_to_chat_history('assistant_response', full_response, assistant.current_region)
+            current_region = getattr(assistant, 'current_region', None)
+            add_to_chat_history('assistant_response', full_response, current_region)
             
             # Send final message with complete status
             yield f"data: {json.dumps({'complete': True, 'success': True, 'region': assistant.current_region, 'web_search_used': use_web})}\n\n"
             
         except Exception as e:
             error_msg = f'Error: {str(e)}'
-            add_to_chat_history('assistant_response', error_msg, assistant.current_region)
+            current_region = getattr(assistant, 'current_region', None)
+            add_to_chat_history('assistant_response', error_msg, current_region)
             yield f"data: {json.dumps({'error': error_msg, 'success': False})}\n\n"
     
     return Response(
@@ -2297,7 +2302,7 @@ def get_performance_stats():
 
 if __name__ == '__main__':
     import sys
-    port = 5001
+    port = 8000
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             if arg.startswith('--port='):
