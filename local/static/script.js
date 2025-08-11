@@ -1,8 +1,13 @@
 // ==================== Configuration ====================
 // These values would be dynamically set by the Flask app
 const THUMBNAIL_API_URL = `https://llm.humanbrain.in:1062/get/brain/thumbnails/100`;
-const GEOJSON_URL = `https://apollo2.humanbrain.in/iipsrv/ddn/storageIIT/humanbrain/analytics/222/appData/atlasEditor/189/NISL/1000/222-NISL-1000-FlatTree::IIT:V1:SS-100:306:1000:1000.json`;
-const IMAGE_URL = `https://apollo2.humanbrain.in/iipsrv/fcgi-bin/iipsrv.fcgi?FIF=/ddn/storageIIT/humanbrain/analytics/222/NISL/B_222_FB74-SL_334-ST_NISL-SE_1000_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}`;
+
+// const GEOJSON_URL = `https://apollo2.humanbrain.in/iipsrv/ddn/storageIIT/humanbrain/analytics/222/appData/atlasEditor/189/NISL/1000/222-NISL-1000-FlatTree::IIT:V1:SS-100:306:1000:1000.json`;
+// const IMAGE_URL = `https://apollo2.humanbrain.in/iipsrv/fcgi-bin/iipsrv.fcgi?FIF=/ddn/storageIIT/humanbrain/analytics/222/NISL/B_222_FB74-SL_334-ST_NISL-SE_1000_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}`;
+
+const GEOJSON_URL = `https://preprod.humanbrain.in/iipsrv/ddn/storageIIT/humanbrain/analytics/222/appData/atlasEditor/189/NISL/1000/222-NISL-1000-FlatTree::IIT:V1:SS-100:306:1000:1000.json`;
+const IMAGE_URL = `https://preprod.humanbrain.in/iipsrv/fcgi-bin/iipsrv.fcgi?FIF=/ddn/storageIIT/humanbrain/analytics/222/NISL/B_222_FB74-SL_334-ST_NISL-SE_1000_compressed.jp2&WID=1024&GAM=1.4&MINMAX=1:0,255&MINMAX=2:0,255&MINMAX=3:0,255&JTL={z},{tileIndex}`;
+
 
 // Initial configuration
 let currentBiosample = 222;
@@ -1169,6 +1174,7 @@ if (currentRegionSpan) {
 if (askBtn) {
     askBtn.disabled = true;
 }
+updateInputPlaceholder();
 }
 
 // ==================== Theme Toggle Functionality ====================
@@ -1250,6 +1256,8 @@ function openChatbot() {
 mainContainer.classList.add('chatbot-active');
 chatbotColumn.classList.add('active');
 chatbotToggle.classList.add('hidden');
+
+// Welcome message removed as per user request
 
 // Trigger layout updates after animation completes
 setTimeout(() => {
@@ -1339,6 +1347,23 @@ if (questionInput.value.trim()) {
 }
 });
 
+// Update input placeholder based on selected region
+function updateInputPlaceholder() {
+if (currentBrainRegion) {
+    questionInput.placeholder = `Ask about ${currentBrainRegion} (e.g., "What does it do?", "Tell me more about its functions")`;
+    // Enable ask button if input has text or if we have a current region
+    if (questionInput.value.trim() || currentBrainRegion) {
+        askBtn.disabled = false;
+    }
+} else {
+    questionInput.placeholder = "Ask about any brain region (e.g., 'Tell me about the hippocampus')";
+    // Disable ask button if no current region and no input text
+    if (!questionInput.value.trim()) {
+        askBtn.disabled = true;
+    }
+}
+}
+
 
 async function selectBrainRegion(regionName) {
 if (isWaitingForResponse) return;
@@ -1350,6 +1375,7 @@ openChatbot();
 currentBrainRegion = regionName;
 currentRegionSpan.textContent = ` - ${regionName}`;
 askBtn.disabled = false;
+updateInputPlaceholder();
 
 // Add user message
 addMessage(`Tell me about the ${regionName}`, 'user');
@@ -1575,6 +1601,10 @@ chatMessages.scrollTop = chatMessages.scrollHeight;
 return messageP;
 }
 
+function showWelcomeMessage() {
+// No welcome message - removed as per user request
+}
+
 async function showChatHistory() {
 try {
     showLoading('Loading chat history');
@@ -1596,15 +1626,18 @@ try {
 }
 
 function displayChatHistory(history, currentRegion, currentMode) {
+// Debug: Log the history to see what we're getting
+console.log('Chat History Data:', history);
+
 // Update stats
 const totalMessages = history.length;
 const userQuestions = history.filter(msg => msg.type === 'user_query').length;
+const assistantResponses = history.filter(msg => msg.type === 'assistant_response' || msg.type === 'region_info').length;
 const regions = [...new Set(history.filter(msg => msg.region).map(msg => msg.region))];
 
 historyStats.innerHTML = `
     <strong>Chat Statistics:</strong> 
-    ${totalMessages} total messages, 
-    ${userQuestions} questions asked, 
+    ${totalMessages} total messages (${userQuestions} questions, ${assistantResponses} answers), 
     ${regions.length} regions explored
     ${currentRegion ? `<br><strong>Current:</strong> ${currentRegion} (${currentMode || 'fast'} mode)` : ''}
 `;
@@ -1617,49 +1650,30 @@ if (history.length === 0) {
     return;
 }
 
-// Group messages by region for better organization
-const groupedHistory = {};
+// Display messages in chronological order
 history.forEach((msg, index) => {
-    const region = msg.region || 'General';
-    if (!groupedHistory[region]) {
-        groupedHistory[region] = [];
-    }
-    groupedHistory[region].push({...msg, index});
-});
-
-// Display grouped history
-Object.keys(groupedHistory).forEach(region => {
-    const regionDiv = document.createElement('div');
-    regionDiv.className = 'history-region-group';
+    const historyItem = document.createElement('div');
+    historyItem.className = `history-item ${msg.type}`;
     
-    const regionHeader = document.createElement('h4');
-    regionHeader.className = 'history-region-header';
-    regionHeader.textContent = region;
-    regionDiv.appendChild(regionHeader);
+    const timestamp = new Date(msg.timestamp).toLocaleString();
+    const typeLabel = {
+        'user_query': '❓ Question',
+        'region_info': '🧠 Region Info', 
+        'assistant_response': '🤖 Answer'
+    }[msg.type] || '💬 Message';
     
-    groupedHistory[region].forEach(msg => {
-        const historyItem = document.createElement('div');
-        historyItem.className = `history-item ${msg.type}`;
-        
-        const timestamp = new Date(msg.timestamp).toLocaleString();
-        const typeLabel = {
-            'user_query': '❓ Question',
-            'region_info': '🧠 Region Info', 
-            'assistant_response': '🤖 Answer'
-        }[msg.type] || '💬 Message';
-        
-        historyItem.innerHTML = `
-            <div class="history-item-header">
-                <span class="history-type">${typeLabel}</span>
-                <span class="history-timestamp">${timestamp}</span>
-            </div>
-            <div class="history-content">${msg.content}</div>
-        `;
-        
-        regionDiv.appendChild(historyItem);
-    });
+    // Add region indicator if available
+    const regionIndicator = msg.region ? ` (${msg.region})` : '';
     
-    historyList.appendChild(regionDiv);
+    historyItem.innerHTML = `
+        <div class="history-item-header">
+            <span class="history-type">${typeLabel}${regionIndicator}</span>
+            <span class="history-timestamp">${timestamp}</span>
+        </div>
+        <div class="history-content">${formatMessage(msg.content)}</div>
+    `;
+    
+    historyList.appendChild(historyItem);
 });
 }
 
@@ -1739,6 +1753,7 @@ try {
         currentBrainRegion = null;
         currentRegionSpan.textContent = '';
         askBtn.disabled = true;
+        updateInputPlaceholder();
         alert('Chat history cleared successfully!');
         // Close history modal if open
         historyModal.style.display = 'none';

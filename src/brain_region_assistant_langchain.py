@@ -2566,27 +2566,65 @@ Keep it under 200 words but be informative.{context}"""
         print(f"🔍 ask_question called with: '{question}'")
         print(f"🔍 Current region: {self.current_region}")
         
-        # Use intelligent detection to check if question is about current region
-        is_about_current_region = self._is_question_about_current_region(question)
+        # ALWAYS try to get region from chat history first
+        if not self.current_region:
+            # Try to extract region from chat history
+            chat_context = self.get_conversation_context(10)
+            if chat_context:
+                # Look for any brain region mentioned in recent conversation
+                extracted_region = self._extract_brain_region_from_question(chat_context)
+                if extracted_region:
+                    self.current_region = extracted_region
+                    print(f"✅ Recovered region from chat history: {extracted_region}")
         
-        if is_about_current_region:
-            # Question is about the current region, don't change it
-            print(f"✅ Question is about current region: {self.current_region}")
+        # If we have a current region set, always prioritize it for contextual questions
+        if self.current_region:
+            print(f"✅ Current region set: {self.current_region} - using for context")
         else:
-            # Try to extract a new brain region from the question
+            # Try to extract a brain region from the question
             extracted_region = self._extract_brain_region_from_question(question)
             if extracted_region:
                 # Update current region if a new one is mentioned
                 self.current_region = extracted_region
                 print(f"✅ Detected and set new brain region: {extracted_region}")
         
-        # If we don't have a brain region, check if it's a general brain question
+        # FORCE: If we still don't have a region but have chat history, assume it's contextual
         if not self.current_region:
+            chat_context = self.get_conversation_context(5)
+            if chat_context and any(keyword in question.lower() for keyword in ['what', 'how', 'does', 'is', 'can', 'tell', 'explain']):
+                # This looks like a follow-up question - try to extract region from any previous conversation
+                for conversation in self.conversation_history[-10:]:  # Check last 10 conversations
+                    if hasattr(conversation, 'region_context') and conversation.region_context:
+                        self.current_region = conversation.region_context
+                        print(f"✅ Using region from previous conversation: {self.current_region}")
+                        break
+        
+        # ALWAYS get conversation context first
+        context = self.get_conversation_context(10)  # Get extensive context
+        print(f"✅ Retrieved conversation context: {len(context) if context else 0} characters")
+        
+        if not self.current_region:
+            # No specific region, but ALWAYS use conversation context
+            if self.conversation_history:
+                print("🔄 Using conversation history as context for response")
+                prompt = f"Based on our previous conversation and maintaining continuity, answer this question: {question}{context}"
+                try:
+                    if use_web and self.use_web_search:
+                        response = self.web_search.search(prompt, self.llm)
+                        summary = self._generate_summary(response)
+                        full_response = f"{response}\n\n{summary}"
+                    else:
+                        full_response = self._sync_llama_request(prompt)
+                    
+                    self.add_to_conversation(question, full_response, "contextual_response")
+                    return full_response
+                except Exception as e:
+                    print(f"❌ Error in contextual response: {e}")
+            
+            # Check if it's a brain-related question even without conversation history
             brain_keywords = ['brain', 'neural', 'neuron', 'synapse', 'cognitive', 'memory', 'emotion', 'learning', 'behavior', 'neuroscience', 'psychology', 'mind', 'consciousness']
             if any(keyword in question.lower() for keyword in brain_keywords):
                 print("🧠 Detected general brain question")
-                # Try to provide a general brain-related answer
-                context = self.get_conversation_context(2)
                 prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
                 try:
                     if use_web and self.use_web_search:
@@ -2601,27 +2639,16 @@ Keep it under 200 words but be informative.{context}"""
                 except Exception as e:
                     print(f"❌ Error in general brain answer: {e}")
             
-            # If we reach here, provide helpful guidance
-            return """I can help you with brain and neuroscience questions! Here are some examples:
-
-**Specific Brain Regions:**
-• "Tell me about the hippocampus"  
-• "What does the amygdala do?"
-• "Explain the prefrontal cortex"
-
-**General Brain Topics:**
-• "How does memory work?"
-• "What are neurons?"
-• "How does the brain process emotions?"
-
-**Or click on a brain region in the atlas above!**"""
+            # If we reach here, try to provide a general response
+            return "I need more context to provide a specific answer. Please ask about a specific brain region or topic."
         
-        try:
-            # Get conversation context for continuity
-            context = self.get_conversation_context(4)  # Get last 4 exchanges
-            
+        # IMPORTANT: If we reach here, we DO have a current region, so process the question with that context
+        print(f"✅ Processing question with current region: {self.current_region}")
+        print(f"✅ Using full conversation context for contextual awareness")
+        
+        try:            
             if use_web and self.use_web_search:
-                query = f"Answer this specific question about the {self.current_region} brain region: {question}{context}"
+                query = f"Answer this specific question about the {self.current_region} brain region, considering our full conversation context: {question}{context}"
                 try:
                     # Use direct web search for questions to avoid agent complexity
                     response = self.web_search.search(query, self.llm)
@@ -2643,11 +2670,8 @@ Keep it under 200 words but be informative.{context}"""
                     self.add_to_conversation(question, full_response, "fallback_question")
                     return full_response
             else:
-                # Enhance prompt for contextual questions
-                if is_about_current_region:
-                    prompt = f"The user is asking about the {self.current_region} brain region. They want to know: {question}. Provide a clear, concise answer focusing on the {self.current_region}.{context}"
-                else:
-                    prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
+                # Enhance prompt for contextual questions about current region with full conversation context
+                prompt = f"Based on our ongoing conversation about the {self.current_region} brain region, answer this question: {question}. Consider all previous context and maintain conversation continuity.{context}"
                 response = self._sync_llama_request(prompt)
                 # Generate 5-point summary
                 summary = self._generate_summary(response)
@@ -2665,19 +2689,42 @@ Keep it under 200 words but be informative.{context}"""
         print(f"🔍 ask_question_stream called with: '{question}'")
         print(f"🔍 Current region: {self.current_region}")
         
-        # Use intelligent detection to check if question is about current region
-        is_about_current_region = self._is_question_about_current_region(question)
+        # ALWAYS try to get region from chat history first
+        if not self.current_region:
+            # Try to extract region from chat history
+            chat_context = self.get_conversation_context(10)
+            if chat_context:
+                # Look for any brain region mentioned in recent conversation
+                extracted_region = self._extract_brain_region_from_question(chat_context)
+                if extracted_region:
+                    self.current_region = extracted_region
+                    print(f"✅ Recovered region from chat history: {extracted_region}")
         
-        if is_about_current_region:
-            # Question is about the current region, don't change it
-            print(f"✅ Question is about current region: {self.current_region}")
+        # If we have a current region set, always prioritize it for contextual questions
+        if self.current_region:
+            print(f"✅ Current region set: {self.current_region} - using for context")
         else:
-            # Try to extract a new brain region from the question
+            # Try to extract a brain region from the question
             extracted_region = self._extract_brain_region_from_question(question)
             if extracted_region:
                 # Update current region if a new one is mentioned
                 self.current_region = extracted_region
                 yield f"**Analyzing {extracted_region}...**\n\n"
+        
+        # FORCE: If we still don't have a region but have chat history, assume it's contextual
+        if not self.current_region:
+            chat_context = self.get_conversation_context(5)
+            if chat_context and any(keyword in question.lower() for keyword in ['what', 'how', 'does', 'is', 'can', 'tell', 'explain']):
+                # This looks like a follow-up question - try to extract region from any previous conversation
+                for conversation in self.conversation_history[-10:]:  # Check last 10 conversations
+                    if hasattr(conversation, 'region_context') and conversation.region_context:
+                        self.current_region = conversation.region_context
+                        print(f"✅ Using region from previous conversation: {self.current_region}")
+                        break
+        
+        # ALWAYS get conversation context first
+        context = self.get_conversation_context(10)  # Get extensive context
+        print(f"✅ Retrieved conversation context: {len(context) if context else 0} characters")
         
         # If we have a brain region (either existing or newly extracted), process normally
         if self.current_region:
@@ -2688,7 +2735,6 @@ Keep it under 200 words but be informative.{context}"""
             if any(keyword in question.lower() for keyword in brain_keywords):
                 print("🧠 Detected general brain question")
                 # Try to provide a general brain-related answer with streaming
-                context = self.get_conversation_context(2)
                 prompt = f"Answer this neuroscience/brain-related question: {question}{context}"
                 try:
                     full_response = ""
@@ -2708,28 +2754,57 @@ Keep it under 200 words but be informative.{context}"""
                 except Exception as e:
                     print(f"❌ Error in general brain answer: {e}")
             
-            # If we reach here, provide helpful guidance
-            yield """I can help you with brain and neuroscience questions! Here are some examples:
-
-**Specific Brain Regions:**
-• "Tell me about the hippocampus"
-• "What does the amygdala do?"
-• "Explain the prefrontal cortex"
-
-**General Brain Topics:**
-• "How does memory work?"
-• "What are neurons?"
-• "How does the brain process emotions?"
-
-**Or click on a brain region in the atlas above!**"""
+            # Last resort - if we have any conversation history, assume this is contextual
+            if self.conversation_history:
+                print("🔄 No region found but have conversation history - treating as contextual")
+                prompt = f"Based on our previous conversation, answer this question: {question}{context}"
+                try:
+                    if use_web and self.use_web_search:
+                        response = self.web_search.search(prompt, self.llm)
+                        # Stream the response
+                        chunk_size = 50
+                        for i in range(0, len(response), chunk_size):
+                            yield response[i:i+chunk_size]
+                        
+                        # Generate and stream summary
+                        full_ai_response = response
+                        summary_content = ""
+                        for chunk in self._generate_summary_stream(full_ai_response):
+                            yield chunk
+                            summary_content += chunk
+                        
+                        full_response = f"{full_ai_response}\n\n{summary_content}"
+                        self.add_to_conversation(question, full_response, "contextual_fallback")
+                        return
+                    else:
+                        full_response = ""
+                        for chunk in self._stream_llama_request(prompt):
+                            yield chunk
+                            full_response += chunk
+                        
+                        # Add summary
+                        summary_content = ""
+                        for chunk in self._generate_summary_stream(full_response):
+                            yield chunk
+                            summary_content += chunk
+                        
+                        complete_response = f"{full_response}\n\n{summary_content}"
+                        self.add_to_conversation(question, complete_response, "contextual_fallback")
+                        return
+                except Exception as e:
+                    print(f"❌ Error in contextual fallback: {e}")
+            
+            # If we reach here, try to provide a general response
+            yield "I need more context to provide a specific answer. Please ask about a specific brain region or topic."
             return
         
-        try:
-            # Get conversation context for continuity
-            context = self.get_conversation_context(4)  # Get last 4 exchanges
-            
+        # IMPORTANT: If we reach here, we DO have a current region, so process the question with that context
+        print(f"✅ Processing question with current region: {self.current_region}")
+        print(f"✅ Using full conversation context for contextual awareness")
+        
+        try:            
             if use_web and self.use_web_search:
-                query = f"Answer this specific question about the {self.current_region} brain region: {question}{context}"
+                query = f"Answer this specific question about the {self.current_region} brain region, considering our full conversation context: {question}{context}"
                 try:
                     # For web search, we'll have to get the full response and stream it
                     response = self.web_search.search(query, self.llm)
@@ -2769,11 +2844,8 @@ Keep it under 200 words but be informative.{context}"""
                     full_response = f"{full_ai_response}\n\n{summary_content}"
                     self.add_to_conversation(question, full_response, "fallback_question")
             else:
-                # Enhance prompt for contextual questions
-                if is_about_current_region:
-                    prompt = f"The user is asking about the {self.current_region} brain region. They want to know: {question}. Provide a clear, concise answer focusing on the {self.current_region}.{context}"
-                else:
-                    prompt = f"About the {self.current_region} brain region, answer concisely: {question}{context}"
+                # Enhance prompt for contextual questions about current region with full conversation context
+                prompt = f"Based on our ongoing conversation about the {self.current_region} brain region, answer this question: {question}. Consider all previous context and maintain conversation continuity.{context}"
                 main_response = ""
                 for chunk in self._stream_llama_request(prompt):
                     yield chunk

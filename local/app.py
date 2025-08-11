@@ -26,7 +26,9 @@ CORS(app)
 # Database Configuration
 MySQL_db_user = "root"
 MySQL_db_password = "Health#123"
-MySQL_db_host = "apollo2.humanbrain.in"
+# MySQL_db_host = "apollo2.humanbrain.in"
+MySQL_db_host = "dev2adi.humanbrain.in"
+
 MySQL_db_port = "3306"
 MySQL_db_name = "HBA_V2"
 MySQL_db = SQLDatabase.from_uri(f"mysql+pymysql://{MySQL_db_user}:{MySQL_db_password}@{MySQL_db_host}:{MySQL_db_port}/{MySQL_db_name}")
@@ -2015,8 +2017,6 @@ def ask_question():
                 'message': 'Please provide a question'
             }), 400
         
-        # Remove the region requirement check - let the assistant handle region extraction
-        
         # Sync conversation history before processing
         sync_assistant_history()
         
@@ -2024,10 +2024,69 @@ def ask_question():
         if mode == 'web':
             use_web = True
         
+        # Check if this is a question about the current region
+        current_region = getattr(assistant, 'current_region', None)
+        print(f"🔍 Flask: Current region before processing: {current_region}")
+        print(f"🔍 Flask: Original question: '{question}'")
+        
+        # If no current region but we have chat history, try to extract region from history
+        if not current_region:
+            chat_history = get_chat_history()
+            if chat_history:
+                # Look through recent chat history for any brain region mentions
+                for msg in reversed(chat_history[-10:]):  # Check last 10 messages
+                    if msg.get('region'):
+                        assistant.current_region = msg['region']
+                        current_region = msg['region']
+                        print(f"🔍 Flask: Recovered region from chat history: {current_region}")
+                        break
+        
+        # If we have a current region, enhance the question with context
+        if current_region:
+            # First handle pronouns and direct references
+            original_question = question
+            contextual_question = question.lower()
+            
+            # Handle various forms of "it" and contextual references
+            contextual_question = contextual_question.replace(' it ', f' the {current_region} ')
+            contextual_question = contextual_question.replace(' its ', f' the {current_region}\'s ')
+            contextual_question = contextual_question.replace('what does it', f'what does the {current_region}')
+            contextual_question = contextual_question.replace('how does it', f'how does the {current_region}')
+            contextual_question = contextual_question.replace('where is it', f'where is the {current_region}')
+            contextual_question = contextual_question.replace('what is it', f'what is the {current_region}')
+            contextual_question = contextual_question.replace('can it', f'can the {current_region}')
+            contextual_question = contextual_question.replace('does it', f'does the {current_region}')
+            contextual_question = contextual_question.replace('is it', f'is the {current_region}')
+            
+            # Handle "what do normally" type questions
+            if 'what' in contextual_question and 'do' in contextual_question and 'normally' in contextual_question:
+                contextual_question = f'what does the {current_region} do normally'
+            elif 'tell me what' in contextual_question and 'do' in contextual_question:
+                contextual_question = f'tell me what the {current_region} does'
+            
+            # Check if question contains specific brain region names
+            has_specific_region = any(region_word in question.lower() for region_word in [
+                'hippocampus', 'amygdala', 'cortex', 'cerebellum', 'thalamus', 'hypothalamus',
+                'brainstem', 'medulla', 'pons', 'midbrain', 'frontal', 'parietal', 'temporal',
+                'occipital', 'gyrus', 'sulcus', 'lobe', 'nucleus', 'area', 'region'
+            ])
+            
+            # If we made changes to the question, use the contextual version
+            if contextual_question != original_question.lower():
+                # Capitalize first letter
+                question = contextual_question[0].upper() + contextual_question[1:]
+            # If question doesn't contain specific brain region names and wasn't modified, assume it's about current region
+            elif not has_specific_region:
+                # Add context to make the question about the current region
+                enhanced_question = f"Regarding the {current_region}: {question}"
+                question = enhanced_question
+        
         # Add user question to chat history
         search_indicator = " (web search)" if use_web else ""
-        current_region = getattr(assistant, 'current_region', None)
         add_to_chat_history('user_query', f"{question}{search_indicator}", current_region)
+        
+        print(f"🔍 Flask: Final question being sent: '{question}'")
+        print(f"🔍 Flask: Assistant current region: {getattr(assistant, 'current_region', None)}")
         
         # Get answer
         answer = assistant.ask_question(question, use_web)
@@ -2068,8 +2127,6 @@ def ask_question_stream():
     if not question:
         return jsonify({'success': False, 'message': 'Please provide a question'}), 400
     
-    # Remove the region requirement check - let the assistant handle region extraction
-    
     # Sync conversation history before processing
     sync_assistant_history()
     
@@ -2077,9 +2134,65 @@ def ask_question_stream():
     if mode == 'web':
         use_web = True
     
+    # Check if this is a question about the current region
+    current_region = getattr(assistant, 'current_region', None)
+    print(f"🔍 Flask Stream: Current region before processing: {current_region}")
+    print(f"🔍 Flask Stream: Original question: '{question}'")
+    
+    # If no current region but we have chat history, try to extract region from history
+    if not current_region:
+        chat_history = get_chat_history()
+        if chat_history:
+            # Look through recent chat history for any brain region mentions
+            for msg in reversed(chat_history[-10:]):  # Check last 10 messages
+                if msg.get('region'):
+                    assistant.current_region = msg['region']
+                    current_region = msg['region']
+                    print(f"🔍 Flask Stream: Recovered region from chat history: {current_region}")
+                    break
+    
+    # If we have a current region, enhance the question with context
+    if current_region:
+        # First handle pronouns and direct references
+        original_question = question
+        contextual_question = question.lower()
+        
+        # Handle various forms of "it" and contextual references
+        contextual_question = contextual_question.replace(' it ', f' the {current_region} ')
+        contextual_question = contextual_question.replace(' its ', f' the {current_region}\'s ')
+        contextual_question = contextual_question.replace('what does it', f'what does the {current_region}')
+        contextual_question = contextual_question.replace('how does it', f'how does the {current_region}')
+        contextual_question = contextual_question.replace('where is it', f'where is the {current_region}')
+        contextual_question = contextual_question.replace('what is it', f'what is the {current_region}')
+        contextual_question = contextual_question.replace('can it', f'can the {current_region}')
+        contextual_question = contextual_question.replace('does it', f'does the {current_region}')
+        contextual_question = contextual_question.replace('is it', f'is the {current_region}')
+        
+        # Handle "what do normally" type questions
+        if 'what' in contextual_question and 'do' in contextual_question and 'normally' in contextual_question:
+            contextual_question = f'what does the {current_region} do normally'
+        elif 'tell me what' in contextual_question and 'do' in contextual_question:
+            contextual_question = f'tell me what the {current_region} does'
+        
+        # Check if question contains specific brain region names
+        has_specific_region = any(region_word in question.lower() for region_word in [
+            'hippocampus', 'amygdala', 'cortex', 'cerebellum', 'thalamus', 'hypothalamus',
+            'brainstem', 'medulla', 'pons', 'midbrain', 'frontal', 'parietal', 'temporal',
+            'occipital', 'gyrus', 'sulcus', 'lobe', 'nucleus', 'area', 'region'
+        ])
+        
+        # If we made changes to the question, use the contextual version
+        if contextual_question != original_question.lower():
+            # Capitalize first letter
+            question = contextual_question[0].upper() + contextual_question[1:]
+        # If question doesn't contain specific brain region names and wasn't modified, assume it's about current region
+        elif not has_specific_region:
+            # Add context to make the question about the current region
+            enhanced_question = f"Regarding the {current_region}: {question}"
+            question = enhanced_question
+    
     # Add user question to chat history
     search_indicator = " (web search)" if use_web else ""
-    current_region = getattr(assistant, 'current_region', None)
     add_to_chat_history('user_query', f"{question}{search_indicator}", current_region)
     
     def generate():
@@ -2221,6 +2334,10 @@ def get_chat_history_endpoint():
     """Get current chat history"""
     try:
         chat_history = get_chat_history()
+        print(f"🔍 Flask: Returning chat history with {len(chat_history)} messages")
+        for i, msg in enumerate(chat_history[:5]):  # Log first 5 messages for debugging
+            print(f"🔍 Flask: Message {i}: {msg.get('type')} - {msg.get('content', '')[:50]}...")
+        
         return jsonify({
             'success': True,
             'chat_history': chat_history,
