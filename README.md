@@ -2,7 +2,7 @@
 
 A comprehensive brain atlas viewer with AI-powered assistant that provides interactive brain exploration, streaming responses, and 5-point summaries.
 
-(./Screenshot_11-8-2025_142944_dgx3.humanbrain.in.jpeg)
+![Brain Assistant Screenshot](./Screenshot_11-8-2025_142944_dgx3.humanbrain.in.jpeg)
 
 ## 🧠 Overview
 
