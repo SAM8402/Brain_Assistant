@@ -2414,6 +2414,7 @@ Keep it under 200 words but be informative.{context}"""
     
     def get_brain_region_info_stream(self, region_name: str, mode: str = "fast"):
         """Get brain region info with streaming response"""
+        start_time = time.time()
         self.current_region = region_name
         self.current_mode = mode
         
