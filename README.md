@@ -421,7 +421,7 @@ LLM_ENDPOINT=your-llm-endpoint
 - Verify all external service endpoints
 - Test with minimal configuration
 
-## 📄 License
+## 📄 [LICENSE](./LICENSE).
 
 This project is developed for research and educational purposes. Please respect all applicable licenses and terms of use for external services and data sources.
 
